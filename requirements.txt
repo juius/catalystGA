@@ -1,0 +1,7 @@
+rdkit
+networkx
+xyz2mol
+tabulate
+py3Dmol
+submitit
+pre-commit
