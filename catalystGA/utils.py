@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+import pandas as pd
+
 from catalystGA.organometallics.components import BaseCatalyst
 
 
@@ -38,3 +40,9 @@ class ScoringOptions:
 
     def __post_init__(self):
         self.slurm_array_parallelism = self.n_cores // self.cpus_per_task
+
+
+def read_ga_results(csv_file):
+    df = pd.read_csv(csv_file)
+    df.set_index(["generation", "idx"], inplace=True)
+    return df

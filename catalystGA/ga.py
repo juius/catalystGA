@@ -5,7 +5,9 @@ import shutil
 import time
 
 import numpy as np
+import pandas as pd
 import submitit
+from rdkit import Chem
 from tabulate import tabulate
 
 from catalystGA.utils import MoleculeOptions, ScoringOptions, catch
@@ -25,6 +27,7 @@ class GA:
         maximize_score=True,
         selection_pressure=1.5,
         mutation_rate=0.5,
+        log_file=f"ga_{time.strftime('%Y-%m-%d_%H-%M-%S')}.csv",
     ):
         self.mol_options = mol_options
         self.scoring_options = scoring_options
@@ -33,6 +36,7 @@ class GA:
         self.maximize_score = maximize_score
         self.selection_pressure = selection_pressure
         self.mutation_rate = mutation_rate
+        self.log_file = log_file
         self.health_check()
 
     def make_initial_population(self):
@@ -116,7 +120,7 @@ class GA:
         tmp.sort(key=lambda x: x.score, reverse=self.maximize_score)
         return tmp[: self.population_size]
 
-    def write_results(self, results, gennum, detailed=False):
+    def append_results(self, results, gennum, detailed=False):
         if detailed:
             results.append((gennum, self.population))
         else:
@@ -176,6 +180,22 @@ class GA:
 
         print(f"###         Timing       ###\n{tabulate(times)}\n")
 
+    @staticmethod
+    def write_results(results, filename):
+        smiles = []
+        scores = []
+        gidx = []
+        iidx = []
+        for genid, pop in results:
+            smiles.extend([Chem.MolToSmiles(ind.mol) for ind in pop])
+            scores.extend([ind.score for ind in pop])
+            gidx.extend([genid for ind in pop])
+            iidx.extend([i + 1 for i, _ in enumerate(pop)])
+        dat = {"generation": gidx, "idx": iidx, "smiles": smiles, "score": scores}
+        df = pd.DataFrame(dat)
+        df.set_index(["generation", "idx"], inplace=True)
+        df.to_csv(filename)
+
     def run(self):
         # print parameters for GA and scoring
         start_time = time.time()
@@ -189,14 +209,15 @@ class GA:
         self.population = self.calculate_scores(self.population)
         for n in range(1, self.n_generations + 1):
             self.calculate_fitness(self.population)
-            self.write_results(results, gennum=n, detailed=True)
+            self.append_results(results, gennum=n, detailed=True)
             self.print_population(self.population, n)
             children = self.reproduce(self.population)
             children = self.calculate_scores(children)
             self.population = self.prune(self.population + children)
             time_per_gen.append(time.time() - tmp_time)
             tmp_time = time.time()
-        self.write_results(results, gennum=n + 1, detailed=True)
+        self.append_results(results, gennum=n + 1, detailed=True)
         self.print_population(self.population, n + 1)
         self.print_timing(start_time, time.time(), time_per_gen, self.population)
+        self.write_results(results, filename=self.log_file)
         return results

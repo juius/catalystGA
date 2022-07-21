@@ -1,3 +1,5 @@
+numpy
+pandas
 rdkit
 networkx
 tabulate
