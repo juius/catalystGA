@@ -195,6 +195,8 @@ def crossover_non_ring(parent_A, parent_B, mol_options):
 
 
 def graph_crossover(parent_A, parent_B, mol_options):
+    parent_A = copy.deepcopy(parent_A)
+    parent_B = copy.deepcopy(parent_B)
     parent_smiles = [Chem.MolToSmiles(parent_A), Chem.MolToSmiles(parent_B)]
     try:
         Chem.Kekulize(parent_A, clearAromaticFlags=True)
@@ -324,6 +326,7 @@ def change_atom(mol):
 
 
 def graph_mutate(mol, mol_options):
+    mol = copy.deepcopy(mol)
     Chem.Kekulize(mol, clearAromaticFlags=True)
     p = [0.15, 0.14, 0.14, 0.14, 0.14, 0.14, 0.15]
     for i in range(10):
