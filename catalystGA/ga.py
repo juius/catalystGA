@@ -134,6 +134,7 @@ class GA:
                 [[str(ind), ind.score] for ind in population],
                 headers=[f"Generation {genid}", "Score"],
                 tablefmt="simple",
+                floatfmt=".05f",
             )
             + "\n"
         )

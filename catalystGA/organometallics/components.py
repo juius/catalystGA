@@ -101,14 +101,21 @@ class BaseCatalyst:
             constrained_atoms = None
         Chem.SanitizeMol(mol3d)
         # Generate more conformers
-        return CGenerator.generate(mol3d, constrain_atoms=constrained_atoms)
+        return CGenerator.generate(mol3d, constrained_atoms=constrained_atoms)
+
+
+carben = Chem.MolFromSmarts("[C;v2-0]")
+phosphor = Chem.MolFromSmarts("[P,p;v3]")
+nitrogen = Chem.MolFromSmarts("[N,n;v3]")
+oxygen = Chem.MolFromSmarts("[O,o;v2]")
+priority = [carben, phosphor, nitrogen, oxygen]
 
 
 class Ligand:
     def __init__(self, mol, donor_id=None, fixed=False):
         self.mol = mol
         if not donor_id:
-            donor_id = self.find_donor_atom()
+            donor_id = self._find_donor_atom()
         self.donor_id = donor_id
         self.fixed = fixed
 
@@ -129,12 +136,13 @@ class Ligand:
         mol = Chem.MolFromSmiles(smiles)
         return cls(mol, donor_id)
 
-    def find_donor_atom(self):
+    def _find_donor_atom(self):
         # REDO THIS PART
-        for atype in ["P", "N", "C", "Cl", "Br"]:
-            match = self.mol.GetSubstructMatch(Chem.MolFromSmarts(f"[{atype}]"))
+        for p in priority:
+            match = self.mol.GetSubstructMatch(p)
             if len(match) > 0:
                 return match[0]
+
         raise Warning(f"No donor atom found for Ligand {Chem.MolToSmiles(self.mol)}")
 
     def set_positions(self, positions):
