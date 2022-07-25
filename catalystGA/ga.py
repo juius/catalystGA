@@ -1,5 +1,6 @@
 import datetime
 import inspect
+import math
 import random
 import shutil
 import time
@@ -79,9 +80,17 @@ class GA:
                 slurm_array_parallelism=self.scoring_options.slurm_array_parallelism,
             )
             jobs = executor.map_array(self.wrap_scoring, population)
-            population = [catch(job.result) for job in jobs]
-
-        population.sort(key=lambda x: x.score, reverse=self.maximize_score)
+            # read results, if job terminated with error then return individual without score
+            population = [
+                catch(job.result, handle=lambda e: population[i]) for i, job in enumerate(jobs)
+            ]
+        # sort population based on score, if score is NaN then it is always last
+        population.sort(
+            key=lambda x: (self.maximize_score - 0.5) * float("-inf")
+            if math.isnan(x.score)
+            else x.score,
+            reverse=self.maximize_score,
+        )
         try:
             shutil.rmtree("_scoring_tmp")
         except FileNotFoundError:

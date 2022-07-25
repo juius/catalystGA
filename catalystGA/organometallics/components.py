@@ -1,3 +1,4 @@
+import math
 from typing import List
 
 from rdkit import Chem
@@ -11,6 +12,7 @@ class BaseCatalyst:
     def __init__(self, metal: Chem.Mol, ligands: List):
         self.metal = metal
         self.ligands = ligands
+        self.score = math.nan
         self.health_check()
 
     def __repr__(self):
