@@ -4,21 +4,23 @@ import math
 import random
 import shutil
 import time
+from abc import ABC, abstractmethod, abstractstaticmethod
 
 import numpy as np
-import pandas as pd
 import submitit
-from rdkit import Chem
 from tabulate import tabulate
 
-from catalystGA.utils import MoleculeOptions, ScoringOptions, catch
+from catalystGA.utils import GADatabase, MoleculeOptions, ScoringOptions, catch
 
 
 def rank(list):
     return [sorted(list).index(x) for x in list]
 
 
-class GA:
+DB_LOCATION = f"ga_{time.strftime('%Y-%m-%d_%H-%M')}.sqlite"
+
+
+class GA(ABC):
     def __init__(
         self,
         mol_options: MoleculeOptions,
@@ -28,7 +30,7 @@ class GA:
         maximize_score=True,
         selection_pressure=1.5,
         mutation_rate=0.5,
-        log_file=f"ga_{time.strftime('%Y-%m-%d_%H-%M-%S')}.csv",
+        db_location=DB_LOCATION,
     ):
         self.mol_options = mol_options
         self.scoring_options = scoring_options
@@ -37,19 +39,21 @@ class GA:
         self.maximize_score = maximize_score
         self.selection_pressure = selection_pressure
         self.mutation_rate = mutation_rate
-        self.log_file = log_file
+        self.db = GADatabase(db_location)
+        self.db.create_tables()
         self.health_check()
 
+    @abstractmethod
     def make_initial_population(self):
-        raise NotImplementedError("make_initial_population not implemented for Base GA Class")
+        pass
 
-    @staticmethod
+    @abstractstaticmethod
     def crossover(ind1, ind2):
-        raise NotImplementedError("crossover not implemented for Base GA Class")
+        pass
 
-    @staticmethod
+    @abstractstaticmethod
     def mutate(ind):
-        raise NotImplementedError("mutate not implemented for Base GA Class")
+        pass
 
     def health_check(self):
         for fct in ["calculate_score", "__eq__"]:
@@ -190,22 +194,6 @@ class GA:
 
         print(f"###         Timing       ###\n{tabulate(times)}\n")
 
-    @staticmethod
-    def write_results(results, filename):
-        smiles = []
-        scores = []
-        gidx = []
-        iidx = []
-        for genid, pop in results:
-            smiles.extend([Chem.MolToSmiles(ind.mol) for ind in pop])
-            scores.extend([ind.score for ind in pop])
-            gidx.extend([genid for ind in pop])
-            iidx.extend([i + 1 for i, _ in enumerate(pop)])
-        dat = {"generation": gidx, "idx": iidx, "smiles": smiles, "score": scores}
-        df = pd.DataFrame(dat)
-        df.set_index(["generation", "idx"], inplace=True)
-        df.to_csv(filename)
-
     def run(self):
         # print parameters for GA and scoring
         start_time = time.time()
@@ -217,17 +205,21 @@ class GA:
         tmp_time = time.time()
         self.population = self.make_initial_population()
         self.population = self.calculate_scores(self.population)
+        self.db.add_individuals(0, self.population)
+        self.print_population(self.population, 0)
         for n in range(1, self.n_generations + 1):
             self.calculate_fitness(self.population)
+            self.db.add_generation(n, self.population)
             self.append_results(results, gennum=n, detailed=True)
-            self.print_population(self.population, n)
             children = self.reproduce(self.population)
             children = self.calculate_scores(children)
+            self.db.add_individuals(n, children)
             self.population = self.prune(self.population + children)
+            self.print_population(self.population, n)
             time_per_gen.append(time.time() - tmp_time)
             tmp_time = time.time()
+        self.db.add_generation(n, self.population)
         self.append_results(results, gennum=n + 1, detailed=True)
-        self.print_population(self.population, n + 1)
         self.print_timing(start_time, time.time(), time_per_gen, self.population)
-        self.write_results(results, filename=self.log_file)
+
         return results

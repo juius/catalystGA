@@ -34,9 +34,9 @@ def draw3d(
     multipleConfs=False,
     confId=-1,
     atomlabel=False,
+    width=600,
+    height=400,
 ):
-    width = 600
-    height = 400
     p = py3Dmol.view(width=width, height=height)
     if type(mols) is not list:
         mols = [mols]

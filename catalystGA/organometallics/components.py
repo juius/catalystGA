@@ -13,6 +13,7 @@ class BaseCatalyst:
         self.metal = metal
         self.ligands = ligands
         self.score = math.nan
+        self.error = ""
         self.health_check()
 
     def __repr__(self):
@@ -31,6 +32,10 @@ class BaseCatalyst:
             if self.__hash__() == other.__hash__():
                 return True
         return False
+
+    @property
+    def smiles(self):
+        return MolHash(self.mol, HashFunction.CanonicalSmiles)
 
     def health_check(self):
         pass
@@ -64,15 +69,24 @@ class BaseCatalyst:
             f"{len(self.ligands)} vs {len(STemplate.dummy_ligands)}"
         )
         mol3d = Chem.AddHs(self.mol)
+        # Create coordMap
+        coordMap = {0: STemplate.central_atom}
+        for idx, pos in zip(self.donor_ids, STemplate.dummy_ligands):
+            coordMap[idx] = pos
         assert (
-            Chem.rdDistGeom.EmbedMolecule(mol3d, ETversion=2, useRandomCoords=True) == 0
+            Chem.rdDistGeom.EmbedMolecule(
+                mol3d, coordMap=coordMap, ETversion=2, useRandomCoords=True
+            )
+            == 0
         ), "Initial embedding failed"
         conf = mol3d.GetConformer()
         # Set position of central atom
-        conf.SetAtomPosition(self.metal.atom.GetAtoms()[0].GetIdx(), STemplate.central_atom)
-        # Set position of donor atoms
-        for i, point in enumerate(STemplate.dummy_ligands):
-            conf.SetAtomPosition(self.donor_ids[i], point)
+        # conf.SetAtomPosition(
+        #     self.metal.atom.GetAtoms()[0].GetIdx(), STemplate.central_atom
+        # )
+        # # Set position of donor atoms
+        # for i, point in enumerate(STemplate.dummy_ligands):
+        #     conf.SetAtomPosition(self.donor_ids[i], point)
 
         # Set fixed ligands
         fixed_atoms = []
@@ -100,7 +114,7 @@ class BaseCatalyst:
                 [self.metal.atom.GetAtoms()[0].GetIdx()] + self.donor_ids + fixed_atoms
             )
         else:
-            constrained_atoms = None
+            constrained_atoms = fixed_atoms
         Chem.SanitizeMol(mol3d)
         # Generate more conformers
         return CGenerator.generate(mol3d, constrained_atoms=constrained_atoms)
