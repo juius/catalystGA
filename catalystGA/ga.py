@@ -78,7 +78,7 @@ class GA(ABC):
             )
             executor.update_parameters(
                 cpus_per_task=self.scoring_options.cpus_per_task,
-                slurm_mem_per_cpu="1GB",
+                # slurm_mem_per_cpu="1GB",
                 timeout_min=self.scoring_options.timeout_min,
                 slurm_partition=self.scoring_options.slurm_partition,
                 slurm_array_parallelism=self.scoring_options.slurm_array_parallelism,

@@ -119,6 +119,12 @@ class GADatabase(object):
     def add_individuals(self, genid, population):
         tmp = []
         for ind in population:
+            try:
+                struc1 = Chem.MolToMolBlock(ind.structures[0])
+                struc2 = Chem.MolToMolBlock(ind.structures[1])
+            except AttributeError:
+                struc1 = ""
+                struc2 = ""
             tmp.append(
                 (
                     genid,
@@ -126,8 +132,8 @@ class GADatabase(object):
                     ind.score,
                     ind.error,
                     ind.timing,
-                    Chem.MolToMolBlock(ind.structures[0]),
-                    Chem.MolToMolBlock(ind.structures[1]),
+                    struc1,
+                    struc2,
                 )
             )
         with self.connection:
