@@ -106,7 +106,7 @@ class GADatabase(object):
         try:
             fitness = [i.fitness for i in population]
         except AttributeError:
-            fitness = [math.nan for i in population]
+            fitness = [math.nan for _ in population]
         with self.connection:
             self.cur.executemany(
                 """
@@ -120,8 +120,8 @@ class GADatabase(object):
         tmp = []
         for ind in population:
             try:
-                struc1 = Chem.MolToMolBlock(ind.structures[0])
-                struc2 = Chem.MolToMolBlock(ind.structures[1])
+                struc1 = Chem.MolToMolBlock(ind.structure1)
+                struc2 = Chem.MolToMolBlock(ind.structure2)
             except AttributeError:
                 struc1 = ""
                 struc2 = ""
@@ -136,6 +136,8 @@ class GADatabase(object):
                     struc2,
                 )
             )
+            tmp.append(list(ind.__dict__.values()))
+
         with self.connection:
             self.cur.executemany(
                 """
