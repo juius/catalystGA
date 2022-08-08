@@ -123,7 +123,7 @@ class GA(ABC):
             if child:
                 if random.random() <= self.mutation_rate:
                     child = self.mutate(child, self.mol_options)
-                if child not in children:
+                if child not in children and child not in population:
                     if child:
                         children.append(child)
         return children
@@ -207,18 +207,18 @@ class GA(ABC):
         self.population = self.calculate_scores(self.population)
         self.db.add_individuals(0, self.population)
         self.print_population(self.population, 0)
-        for n in range(1, self.n_generations + 1):
+        for n in range(0, self.n_generations):
             self.calculate_fitness(self.population)
             self.db.add_generation(n, self.population)
             self.append_results(results, gennum=n, detailed=True)
             children = self.reproduce(self.population)
             children = self.calculate_scores(children)
-            self.db.add_individuals(n, children)
+            self.db.add_individuals(n + 1, children)
             self.population = self.prune(self.population + children)
-            self.print_population(self.population, n)
+            self.print_population(self.population, n + 1)
             time_per_gen.append(time.time() - tmp_time)
             tmp_time = time.time()
-        self.db.add_generation(n, self.population)
+        self.db.add_generation(n + 1, self.population)
         self.append_results(results, gennum=n + 1, detailed=True)
         self.print_timing(start_time, time.time(), time_per_gen, self.population)
 
