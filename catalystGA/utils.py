@@ -136,7 +136,6 @@ class GADatabase(object):
                     struc2,
                 )
             )
-            tmp.append(list(ind.__dict__.values()))
 
         with self.connection:
             self.cur.executemany(
