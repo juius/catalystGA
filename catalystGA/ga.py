@@ -123,9 +123,8 @@ class GA(ABC):
             if child:
                 if random.random() <= self.mutation_rate:
                     child = self.mutate(child, self.mol_options)
-                if child not in children and child not in population:
-                    if child:
-                        children.append(child)
+                if child and child not in children and not self.db.exists(child.smiles):
+                    children.append(child)
         return children
 
     def prune(self, population):

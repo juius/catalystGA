@@ -73,6 +73,22 @@ class GADatabase(object):
         """commit changes to database"""
         self.connection.commit()
 
+    def exists(self, smiles):
+        """check if a smiles exists in the database"""
+        with self.connection:
+            self.cur.execute(
+                f"""
+                    SELECT
+                    EXISTS(
+                        SELECT 1
+                        FROM individuals
+                        WHERE smiles="{smiles}"
+                        LIMIT 1
+                        );
+                    """
+            )
+            return bool(self.cur.fetchone()[0])
+
     def create_tables(self):
         """create a database table if it does not exist already"""
         self.cur.execute(
