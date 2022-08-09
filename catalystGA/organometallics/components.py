@@ -20,12 +20,13 @@ class BaseCatalyst:
         return f"{self.__class__.__name__}({self.metal},{self.ligands})"
 
     def __hash__(self) -> int:
-        return hash(
-            ",".join(
-                [MolHash(self.metal.atom, HashFunction.CanonicalSmiles)]
-                + [MolHash(lig.mol, HashFunction.CanonicalSmiles) for lig in self.ligands]
-            )
-        )
+        return self.smiles
+        # return hash(
+        #     ",".join(
+        #         [MolHash(self.metal.atom, HashFunction.CanonicalSmiles)]
+        #         + [MolHash(lig.mol, HashFunction.CanonicalSmiles) for lig in self.ligands]
+        #     )
+        # )
 
     def __eq__(self, other):
         if isinstance(other, BaseCatalyst):
@@ -35,6 +36,7 @@ class BaseCatalyst:
 
     @property
     def smiles(self):
+        self.assemble()
         return MolHash(self.mol, HashFunction.CanonicalSmiles)
 
     def health_check(self):
