@@ -222,6 +222,7 @@ class GA(ABC):
             self.print_population(self.population, n + 1)
             time_per_gen.append(time.time() - tmp_time)
             tmp_time = time.time()
+        self.calculate_fitness(self.population)
         self.db.add_generation(n + 1, self.population)
         self.append_results(results, gennum=n + 1, detailed=True)
         self.print_timing(start_time, time.time(), time_per_gen, self.population)
