@@ -129,7 +129,12 @@ class GA(ABC):
 
     def prune(self, population):
         tmp = list(set(population))
-        tmp.sort(key=lambda x: x.score, reverse=self.maximize_score)
+        tmp.sort(
+            key=lambda x: (self.maximize_score - 0.5) * float("-inf")
+            if math.isnan(x.score)
+            else x.score,
+            reverse=self.maximize_score,
+        )
         return tmp[: self.population_size]
 
     def append_results(self, results, gennum, detailed=False):
