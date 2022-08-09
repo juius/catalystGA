@@ -20,7 +20,7 @@ class BaseCatalyst:
         return f"{self.__class__.__name__}({self.metal},{self.ligands})"
 
     def __hash__(self) -> int:
-        return self.smiles
+        return hash(self.smiles)
         # return hash(
         #     ",".join(
         #         [MolHash(self.metal.atom, HashFunction.CanonicalSmiles)]
