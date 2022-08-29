@@ -92,6 +92,9 @@ class StructureTemplate:
                     dummy_ligand_ids.remove(idx)
             # remove connections to central atom in ac and find subgraphs
             zeros = np.zeros_like(ac[central_atom_id])
+            seperate = list(itertools.permutations(fixed_ligand_donor_ids, 2))
+            for pair in seperate:
+                ac[pair[0], pair[1]] = 0
             ac[central_atom_id, :] = zeros
             ac[:, central_atom_id] = zeros
             g = nx.from_numpy_matrix(ac)
