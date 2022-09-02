@@ -35,6 +35,10 @@ class BaseCatalyst:
         return False
 
     @property
+    def mol(self):
+        return self.assemble()
+
+    @property
     def smiles(self):
         self.assemble()
         return MolHash(self.mol, HashFunction.CanonicalSmiles)
@@ -45,7 +49,7 @@ class BaseCatalyst:
         #     self.ligands
         # ), f"Wrong number of ligands. Got {len(self.ligands)}, expected {self.n_ligands}"
 
-    def assemble(self):
+    def assemble(self, template=None):
         # Initialize Mol
         tmp = self.metal.atom
         # Add ligands
@@ -61,8 +65,9 @@ class BaseCatalyst:
             self.donor_ids.append(donor_id)
             # Add Bond to Central Atom
             emol.AddBond(donor_id, 0, Chem.BondType.DATIVE)
-        self.mol = emol.GetMol()
-        Chem.SanitizeMol(self.mol)
+        mol = emol.GetMol()
+        Chem.SanitizeMol(mol)
+        return mol
 
     def embed(self, STemplate, CGenerator, constrain_all=True):
         # Embed one conformer and set positions

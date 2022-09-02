@@ -10,6 +10,7 @@ import numpy as np
 import submitit
 from tabulate import tabulate
 
+from catalystGA.filters.size import check_n_heavy_atoms
 from catalystGA.utils import GADatabase, MoleculeOptions, ScoringOptions, catch
 
 
@@ -38,6 +39,7 @@ class GA(ABC):
         self.n_generations = n_generations
         self.maximize_score = maximize_score
         self.selection_pressure = selection_pressure
+
         self.mutation_rate = mutation_rate
         self.db = GADatabase(db_location)
         self.db.create_tables()
@@ -56,6 +58,11 @@ class GA(ABC):
         pass
 
     def health_check(self):
+        """Checks if methods 'calculate_score' and '__eq__' are implemented in the individual class
+
+        Raises:
+            NotImplementedError: If methods are not implemented
+        """
         for fct in ["calculate_score", "__eq__"]:
             if not hasattr(self.mol_options.individual_type, fct):
                 raise NotImplementedError(
@@ -68,7 +75,15 @@ class GA(ABC):
         print(individual.score)
         return individual
 
-    def calculate_scores(self, population):
+    def calculate_scores(self, population: list) -> list:
+        """Calculates scores for all individuals in the population
+
+        Args:
+            population (List): List of individuals
+
+        Returns:
+            population: List of individuals with scores
+        """
         if not self.scoring_options.parallel:
             for ind in population:
                 ind.calculate_score()
@@ -78,7 +93,6 @@ class GA(ABC):
             )
             executor.update_parameters(
                 cpus_per_task=self.scoring_options.cpus_per_task,
-                # slurm_mem_per_cpu="1GB",
                 timeout_min=self.scoring_options.timeout_min,
                 slurm_partition=self.scoring_options.slurm_partition,
                 slurm_array_parallelism=self.scoring_options.slurm_array_parallelism,
@@ -101,7 +115,12 @@ class GA(ABC):
             pass
         return population
 
-    def calculate_fitness(self, population):
+    def calculate_fitness(self, population: list) -> None:
+        """Calculates fitness of all individuals in the population
+
+        Args:
+            population (list): List of individuals
+        """
         scores = [ind.score for ind in population]
         ranks = rank(scores)
         fitness = [
@@ -114,20 +133,36 @@ class GA(ABC):
         for ind, fitness in zip(population, normalized_fitness):
             ind.fitness = fitness
 
-    def reproduce(self, population):
+    def reproduce(self, population: list) -> list:
+        """Creates new offspring from the population
+
+        Args:
+            population (list): List of individuals (parents)
+
+        Returns:
+            list: List of new individuals (children)
+        """
         children = []
         fitness = [ind.fitness for ind in population]
         while len(children) < self.population_size:
             parent1, parent2 = np.random.choice(population, p=fitness, size=2, replace=False)
-            child = self.crossover(parent1, parent2, self.mol_options)
-            if child:
+            child = self.crossover(parent1, parent2)
+            if child and check_n_heavy_atoms(child.mol, self.mol_options):
                 if random.random() <= self.mutation_rate:
-                    child = self.mutate(child, self.mol_options)
+                    child = self.mutate(child)
                 if child and child not in children and not self.db.exists(child.smiles):
                     children.append(child)
         return children
 
-    def prune(self, population):
+    def prune(self, population: list) -> list:
+        """Keep the best individuals in the population, cut down to 'population_size'
+
+        Args:
+            population (list): List of all individuals
+
+        Returns:
+            list: List of kept individuals
+        """
         tmp = list(set(population))
         tmp.sort(
             key=lambda x: (self.maximize_score - 0.5) * float("-inf")
@@ -152,6 +187,7 @@ class GA(ABC):
                 headers=[f"Generation {genid}", "Score"],
                 tablefmt="simple",
                 floatfmt=".05f",
+                maxcolwidths=[64, None],
             )
             + "\n"
         )
