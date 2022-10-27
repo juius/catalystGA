@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import py3Dmol
-from ppqm import chembridge, gaussian
+# from ppqm import chembridge, gaussian
 from rdkit import Chem
 from rdkit.Chem import Draw
 
@@ -47,17 +47,17 @@ def draw3d(
                 line = xyz_f.read()
                 xyz_f.close()
                 p.addModel(line, "xyz")
-            elif mol.endswith(".log"):
-                with open(mol) as f:
-                    lines = f.readlines()
-                geom = gaussian.get_opt_structure(lines)
-                mol = chembridge.axyzc_to_molobj(
-                    [chembridge.get_atom_str(a) for a in geom["atoms"]],
-                    geom["coord"],
-                    0,
-                )
-                mb = Chem.MolToMolBlock(mol)
-                p.addModel(mb, "sdf")
+            # elif mol.endswith(".log"):
+            #     with open(mol) as f:
+            #         lines = f.readlines()
+            #     geom = gaussian.get_opt_structure(lines)
+            #     mol = chembridge.axyzc_to_molobj(
+            #         [chembridge.get_atom_str(a) for a in geom["atoms"]],
+            #         geom["coord"],
+            #         0,
+            #     )
+            #     mb = Chem.MolToMolBlock(mol)
+            #     p.addModel(mb, "sdf")
         else:
             if multipleConfs:
                 for conf in mol.GetConformers():

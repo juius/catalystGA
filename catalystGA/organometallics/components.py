@@ -3,9 +3,17 @@ from typing import List
 
 from rdkit import Chem
 from rdkit.Chem.rdMolHash import HashFunction, MolHash
+from rdkit.Chem import rdChemReactions, rdDistGeom
+
+CARBENE = "#6&v2H0"
+PHOSPHINE = "#15&v3"
+AMINE = "#7&v3"
+OXYGEN = "#8&v2"
+DONORS = [CARBENE, PHOSPHINE, AMINE, OXYGEN]
 
 
 class BaseCatalyst:
+    """Base Class for Metal-Organic Catalysts"""
 
     n_ligands = None
 
@@ -21,12 +29,6 @@ class BaseCatalyst:
 
     def __hash__(self) -> int:
         return hash(self.smiles)
-        # return hash(
-        #     ",".join(
-        #         [MolHash(self.metal.atom, HashFunction.CanonicalSmiles)]
-        #         + [MolHash(lig.mol, HashFunction.CanonicalSmiles) for lig in self.ligands]
-        #     )
-        # )
 
     def __eq__(self, other):
         if isinstance(other, BaseCatalyst):
@@ -45,11 +47,18 @@ class BaseCatalyst:
 
     def health_check(self):
         pass
-        # assert self.n_ligands == len(
-        #     self.ligands
-        # ), f"Wrong number of ligands. Got {len(self.ligands)}, expected {self.n_ligands}"
 
-    def assemble(self, template=None):
+    def assemble(self, extraLigands=None, chiralTag=None, permutationOrder=None):
+        """Forms dative bonds from Ligands to Metal Center, adds extra Ligands from Reaction SMARTS and sets the chiral tag of the metal center and permutation order of the Ligands
+
+        Args:
+            extraLigands (str, optional): Reaction SMARTS to add ligands to the molecule. Defaults to None.
+            chiralTag (Chem.rdchem.ChiralType, optional): Chiral Tag of Metal Atom. Defaults to None.
+            permutationOrder (int, optional): Permutation order of ligands. Defaults to None.
+
+        Returns:
+            Chem.Mol: Catalyst Molecule
+        """
         # Initialize Mol
         tmp = self.metal.atom
         # Add ligands
@@ -67,64 +76,64 @@ class BaseCatalyst:
             emol.AddBond(donor_id, 0, Chem.BondType.DATIVE)
         mol = emol.GetMol()
         Chem.SanitizeMol(mol)
+        # Add Extra Ligands
+        if extraLigands:
+            rxn = rdChemReactions.ReactionFromSmarts(extraLigands)
+            mol = rxn.RunReactants((mol,))[0][0]
+        # Set Chiral Tag and Psermutation Order
+        if chiralTag:
+            metal = mol.GetAtomWithIdx(mol.GetSubstructMatch(self.metal.atom)[0])
+            self._setChiralTagAndOrder(metal, chiralTag, permutationOrder)
         return mol
 
-    def embed(self, STemplate, CGenerator, constrain_all=True):
-        # Embed one conformer and set positions
-        assert len(self.ligands) == len(STemplate.dummy_ligands), (
-            f"Mismatch between number of ligands in catalyst and template: "
-            f"{len(self.ligands)} vs {len(STemplate.dummy_ligands)}"
-        )
-        mol3d = Chem.AddHs(self.mol)
-        # Create coordMap
-        coordMap = {0: STemplate.central_atom}
-        for idx, pos in zip(self.donor_ids, STemplate.dummy_ligands):
-            coordMap[idx] = pos
-        assert (
-            Chem.rdDistGeom.EmbedMolecule(
-                mol3d, coordMap=coordMap, ETversion=2, useRandomCoords=True
-            )
-            == 0
-        ), "Initial embedding failed"
-        conf = mol3d.GetConformer()
-        # Set position of central atom
-        # conf.SetAtomPosition(
-        #     self.metal.atom.GetAtoms()[0].GetIdx(), STemplate.central_atom
-        # )
-        # # Set position of donor atoms
-        # for i, point in enumerate(STemplate.dummy_ligands):
-        #     conf.SetAtomPosition(self.donor_ids[i], point)
+    @staticmethod
+    def _setChiralTagAndOrder(atom, chiralTag, chiralPermutation=None):
+        """Sets the chiral tag of an atom and the permutation order of attached ligands
 
-        # Set fixed ligands
-        fixed_atoms = []
-        if STemplate.fixed_ligands:
-            for ligand in STemplate.fixed_ligands:
-                tmp_last_idx = mol3d.GetNumAtoms()
-                mol3d = Chem.CombineMols(mol3d, ligand.mol)
-                # set positions
-                conf = mol3d.GetConformer()
-                for i, atom in enumerate(ligand.mol.GetAtoms()):
-                    new_id = tmp_last_idx + atom.GetIdx()
-                    conf.SetAtomPosition(new_id, ligand.positions[i])
-                    fixed_atoms.append(new_id)
-                # set bond to central atom
-                emol = Chem.EditableMol(mol3d)
-                emol.AddBond(
-                    int(ligand.donor_id + tmp_last_idx),
-                    0,
-                    Chem.BondType.DATIVE,
-                )
-                mol3d = emol.GetMol()
-        # Set constraints
-        if constrain_all:
-            constrained_atoms = (
-                [self.metal.atom.GetAtoms()[0].GetIdx()] + self.donor_ids + fixed_atoms
-            )
-        else:
-            constrained_atoms = fixed_atoms
+        Args:
+            atom (Chem.Atom): Atom for which to set the chiral tag/permutation order properties
+            chiralTag (Chem.rdchem.ChiralType, optional): Chiral Tag of Metal Atom. Defaults to None.
+            permutationOrder (int, optional): Permutation order of ligands. Defaults to None.
+        """
+        atom.SetChiralTag(chiralTag)
+        if chiralPermutation:
+            atom.SetIntProp("_chiralPermutation", chiralPermutation)
+
+    def embed(
+        self,
+        extraLigands=None,
+        chiralTag=None,
+        permutationOrder=None,
+        numConfs=10,
+        useRandomCoords=True,
+        pruneRmsThresh=-1,
+        **kwargs,
+    ):
+        """Embed the Catalyst Molecule using ETKDG
+
+        Args:
+            extraLigands (str, optional): Reaction SMARTS to add ligands to the molecule. Defaults to None.
+            chiralTag (Chem.rdchem.ChiralType, optional): Chiral Tag of Metal Atom. Defaults to None.
+            permutationOrder (int, optional): Permutation order of ligands. Defaults to None.
+            numConfs (int, optional): Number of Conformers to embed. Defaults to 10.
+            useRandomCoords (bool, optional): Embedding option. Defaults to True.
+            pruneRmsThresh (int, optional): Conformers within this threshold will be removed. Defaults to -1.
+
+        Returns:
+            Chem.Mol: Catalyst Molecule with conformers embedded
+        """
+        mol3d = self.assemble(extraLigands, chiralTag, permutationOrder)
         Chem.SanitizeMol(mol3d)
-        # Generate more conformers
-        return CGenerator.generate(mol3d, constrained_atoms=constrained_atoms)
+        mol3d = Chem.AddHs(mol3d)
+        # Embed with ETKDG
+        cids = rdDistGeom.EmbedMultipleConfs(
+            mol3d,
+            numConfs=numConfs,
+            useRandomCoords=useRandomCoords,
+            pruneRmsThresh=pruneRmsThresh,
+            **kwargs,
+        )
+        return mol3d
 
 
 carben = Chem.MolFromSmarts("[C;v2-0]")
@@ -135,6 +144,8 @@ priority = [carben, phosphor, nitrogen, oxygen]
 
 
 class Ligand:
+    """Organic Ligands"""
+
     def __init__(self, mol, donor_id=None, fixed=False):
         self.mol = mol
         if not donor_id:
@@ -174,6 +185,8 @@ class Ligand:
 
 
 class Metal:
+    """Transition Metal"""
+
     def __init__(self, atom, coordination_number=None):
         if isinstance(atom, str):
             self.atom = Chem.MolFromSmiles(f"[{atom}]")
