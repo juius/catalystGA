@@ -21,6 +21,7 @@ class BaseCatalyst:
         self.metal = metal
         self.ligands = ligands
         self.score = math.nan
+        self.fitness = math.nan
         self.error = ""
         self.health_check()
 

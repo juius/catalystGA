@@ -11,7 +11,7 @@ import submitit
 from tabulate import tabulate
 
 from catalystGA.filters.size import check_n_heavy_atoms
-from catalystGA.utils import GADatabase, MoleculeOptions, ScoringOptions, catch
+from catalystGA.utils import GADatabase, MoleculeOptions, ScoringOptions, catch, param_types
 
 
 def rank(list):
@@ -197,13 +197,28 @@ class GA(ABC):
         for param in inspect.getfullargspec(self.__init__)[0][1:]:
             if param == "mol_options":
                 mol_params = [[key, val] for key, val in self.mol_options.__dict__.items()]
+                print(f"###    Molecule Options    ###\n{tabulate(mol_params)}\n")
             elif param == "scoring_options":
                 scoring_params = [[key, val] for key, val in self.scoring_options.__dict__.items()]
+                print(f"###     Scoring Options    ###\n{tabulate(scoring_params)}\n")
             else:
                 params.append([param, getattr(self, param)])
-        print(f"###      GA Parameters     ###\n{tabulate(params)}\n")
-        print(f"###    Molecule Options    ###\n{tabulate(mol_params)}\n")
-        print(f"###     Scoring Options    ###\n{tabulate(scoring_params)}\n")
+                print(f"###      GA Parameters     ###\n{tabulate(params)}\n")
+
+    def params2dict(self):
+        # create params dict
+        blacklist = set(["db", "scoring_options"])
+        params = {}
+        for key in self.__dict__.keys():
+            if key not in blacklist:
+                value = self.__dict__[key]
+                if isinstance(value, MoleculeOptions):
+                    for k, v in value.__dict__.items():
+                        params[k] = str(v)
+                else:
+                    params[key] = str(param_types(value))
+        print(params)
+        return params
 
     @staticmethod
     def print_timing(start, end, time_per_gen, population):
@@ -238,6 +253,7 @@ class GA(ABC):
         # print parameters for GA and scoring
         start_time = time.time()
         self.print_parameters()
+        self.db.write_parameters(self.params2dict())
         if hasattr(self.mol_options.individual_type, "print_scoring_params"):
             self.mol_options.individual_type.print_scoring_params()
         results = []

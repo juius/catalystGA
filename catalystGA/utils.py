@@ -1,9 +1,9 @@
-import math
+import pickle
 import sqlite3
 from dataclasses import dataclass, field
 from typing import Callable
 
-from rdkit import Chem
+import rdkit
 
 from catalystGA.default_params import DEFAULTS
 from catalystGA.organometallics.components import BaseCatalyst
@@ -47,6 +47,41 @@ def catch(func: Callable, *args, handle=lambda e: e, **kwargs):
         return handle(e)
 
 
+def sqltype(value):
+    if isinstance(value, int):
+        return "INTEGER"
+    elif isinstance(value, float):
+        return "REAL"
+    elif isinstance(value, str):
+        return "TEXT"
+    else:
+        return "BLOB"
+
+
+def param_types(value):
+    if isinstance(value, list):
+        value = str(value)
+    elif isinstance(value, dict):
+        value = str(value)
+    elif isinstance(value, float):
+        value = float(value)
+    elif isinstance(value, int):
+        value = int(value)
+    else:
+        value = str(value)
+    return value
+
+
+def adapt_mol(mol):
+    return pickle.dumps(mol)
+
+
+sqlite3.register_adapter(
+    rdkit.Chem.rdchem.Mol, adapt_mol
+)  # cannot use pickle.dumps directly because of inadequate argument signature
+sqlite3.register_converter("rdkit.Chem.rdchem.Mol", pickle.loads)
+
+
 class GADatabase(object):
     def __init__(self, location: str) -> None:
         """Initialize db class variables"""
@@ -81,10 +116,12 @@ class GADatabase(object):
               idx INTEGER,
               smiles TEXT,
               score REAL,
+              energy_diff REAL,
+              sa_score REAL,
               error TEXT,
               timing REAL,
-              structure1 TEXT,
-              structure2 TEXT
+              structure1 BLOB,
+              structure2 BLOB
             )
           """
         )
@@ -98,46 +135,20 @@ class GADatabase(object):
             )
           """
         )
-        self.commit()
 
     def add_generation(self, genid, population):
         """add a generation to the database"""
-        ids = [genid for i in population]
-        smiles = [i.smiles for i in population]
-        try:
-            fitness = [i.fitness for i in population]
-        except AttributeError:
-            fitness = [math.nan for _ in population]
         with self.connection:
             self.cur.executemany(
                 """
             INSERT INTO generations (idx, smiles, fitness)
             VALUES (?, ?, ?)
             """,
-                [(i, smi, f) for i, smi, f in zip(ids, smiles, fitness)],
+                [(genid, ind.smiles, ind.fitness) for ind in population],
             )
 
     def add_individuals(self, genid, population):
-        """add individuals to the database (smiles, score, error, timing and structures as sdf string)"""
-        tmp = []
-        for ind in population:
-            try:
-                struc1 = Chem.MolToMolBlock(ind.structure1)
-                struc2 = Chem.MolToMolBlock(ind.structure2)
-            except AttributeError:
-                struc1 = ""
-                struc2 = ""
-            tmp.append(
-                (
-                    genid,
-                    ind.smiles,
-                    ind.score,
-                    ind.error,
-                    ind.timing,
-                    struc1,
-                    struc2,
-                )
-            )
+        """add individuals to the database (smiles, score, error, timing and structures as pickled blobs)"""
 
         with self.connection:
             self.cur.executemany(
@@ -145,5 +156,29 @@ class GADatabase(object):
             INSERT INTO individuals (idx, smiles, score, error, timing, structure1, structure2)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-                tmp,
+                [
+                    (
+                        genid,
+                        ind.smiles,
+                        ind.score,
+                        ind.error,
+                        ind.timing,
+                        ind.structure1,
+                        ind.structure2,
+                    )
+                    for ind in population
+                ],
             )
+
+    def write_parameters(self, params):
+        """write parameters to database"""
+        with self.connection:
+            self.cur.execute(
+                f"""CREATE TABLE IF NOT EXISTS parameters(
+                    {', '.join([f'{key} {sqltype(value)}' for key, value in params.items()])}
+                    )"""
+            )
+            insert_params = "INSERT INTO parameters ({}) VALUES ({})".format(
+                ",".join(params), ",".join(["?"] * len(params))
+            )
+            self.cur.execute(insert_params, tuple(params.values()))
