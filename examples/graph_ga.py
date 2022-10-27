@@ -32,7 +32,7 @@ class GraphGA(GA):
         )
 
     def make_initial_population(self) -> List[SuzukiCatalyst]:
-        """Make initial population as a list of SuzukiCatalysts"""
+        """Make initial population as a list of SuzukiCatalysts."""
         population = []
         while len(population) < self.population_size:
             metal = random.choice(metals_list)
@@ -45,7 +45,7 @@ class GraphGA(GA):
 
     @staticmethod
     def crossover(ind1: SuzukiCatalyst, ind2: SuzukiCatalyst) -> SuzukiCatalyst or None:
-        """Crossover the graphs of two ligands of SuzukiCatalysts"""
+        """Crossover the graphs of two ligands of SuzukiCatalysts."""
         ind_type = type(ind1)
         # choose one ligand at random from ind1 and crossover with random ligand from ind2, then replace this ligand in ind1 with new ligand
         ind1_ligands = copy.deepcopy(ind1.ligands)
@@ -71,7 +71,7 @@ class GraphGA(GA):
 
     @staticmethod
     def mutate(ind: SuzukiCatalyst) -> SuzukiCatalyst or None:
-        """Mutate the graph of one ligand of a SuzukiCatalyst"""
+        """Mutate the graph of one ligand of a SuzukiCatalyst."""
         # pick one ligand at random, mutate and replace in ligand list
         idx = random.randint(0, len(ind.ligands) - 1)
         new_mol = None

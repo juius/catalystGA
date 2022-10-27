@@ -5,7 +5,8 @@ from catalystGA.utils import MoleculeOptions
 
 
 def check_n_heavy_atoms(mol: Chem.Mol, mol_options: MoleculeOptions) -> bool:
-    """Check if molecule has number of heavy atoms within range specified in mol_options
+    """Check if molecule has number of heavy atoms within range specified in
+    mol_options.
 
     Args:
         mol (Chem.Mol): Molecule to check

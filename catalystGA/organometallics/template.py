@@ -58,7 +58,7 @@ class StructureTemplate:
         fixed_ligand_donor_ids=None,
         not_bound_to_metal=None,
     ):
-        """Generate StructureTemplate from atomnums, charge, coords"""
+        """Generate StructureTemplate from atomnums, charge, coords."""
         ac = xyz2mol.xyz2AC(atomnums, coords, charge, use_huckel=use_huckel)[0]
 
         # remove wrong bonds from AC
@@ -131,7 +131,7 @@ class StructureTemplate:
         xyz_file,
         **kwargs,
     ):
-        """Generate StructureTemplate from xyz file"""
+        """Generate StructureTemplate from xyz file."""
         atomnums, charge, coords = xyz2mol.read_xyz_file(xyz_file)
         return cls.from_axyzc(atomnums, coords, charge, **kwargs)
 

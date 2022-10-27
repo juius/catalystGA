@@ -8,9 +8,7 @@ from rdkit.Chem import AllChem
 
 
 def list_crossover(genome1: List, genome2: List, n_cutpoints: int = 1) -> List:
-    """
-    Performs crossover of two lists
-    """
+    """Performs crossover of two lists."""
     assert len(genome1) == len(genome2)
     n_genes = len(genome1)
 
@@ -25,9 +23,7 @@ def list_crossover(genome1: List, genome2: List, n_cutpoints: int = 1) -> List:
 
 
 def list_mutate(genome, possible_genes) -> List:
-    """
-    Inserts random gene from possible_genes at random position in genome
-    """
+    """Inserts random gene from possible_genes at random position in genome."""
     n_genes = len(genome)
     new_gene = random.choice(possible_genes)
     insert_point = random.randint(0, n_genes - 1)
@@ -37,7 +33,7 @@ def list_mutate(genome, possible_genes) -> List:
 
 
 def cut(mol: Chem.Mol) -> List[Chem.Mol] or None:
-    """Cut a molecule into fragments at non ring position
+    """Cut a molecule into fragments at non ring position.
 
     Args:
         mol (Chem.Mol): Input molecule
@@ -62,7 +58,7 @@ def cut(mol: Chem.Mol) -> List[Chem.Mol] or None:
 
 
 def cut_ring(mol: Chem.Mol) -> List[Chem.Mol] or None:
-    """Cut a molecule into two fragments at ring position
+    """Cut a molecule into two fragments at ring position.
 
     Args:
         mol (Chem.Mol): Input molecule
@@ -105,7 +101,7 @@ def cut_ring(mol: Chem.Mol) -> List[Chem.Mol] or None:
 
 
 def ring_OK(mol: Chem.Mol) -> bool:
-    """Check if ring system is OK
+    """Check if ring system is OK.
 
     Args:
         mol (Chem.Mol): Input molecule to check
@@ -128,7 +124,7 @@ def ring_OK(mol: Chem.Mol) -> bool:
 
 
 def mol_OK(mol: Chem.Mol) -> bool:
-    """Check if molecule passes sanitization
+    """Check if molecule passes sanitization.
 
     Args:
         mol (Chem.Mol): Input molecule to check
@@ -148,7 +144,7 @@ def mol_OK(mol: Chem.Mol) -> bool:
 
 
 def crossover_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
-    """Performs crossover of two molecules with ring system
+    """Performs crossover of two molecules with ring system.
 
     Args:
         parent_A (Chem.Mol): Input molecule 1
@@ -204,7 +200,7 @@ def crossover_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
 
 
 def crossover_non_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
-    """Performs crossover of two molecules on non-ring systems
+    """Performs crossover of two molecules on non-ring systems.
 
     Args:
         parent_A (Chem.Mol): Input molecule 1
@@ -237,7 +233,8 @@ def crossover_non_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or No
 
 
 def graph_crossover(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
-    """Performs crossover between two molecules, either via ring system or non-ring system
+    """Performs crossover between two molecules, either via ring system or non-
+    ring system.
 
     Args:
         parent_A (Chem.Mol): Input molecule 1
@@ -274,7 +271,7 @@ def graph_crossover(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
 
 
 def delete_atom() -> str:
-    """Reaction SMARTS to delete an atom from a molecule"""
+    """Reaction SMARTS to delete an atom from a molecule."""
     choices = [
         "[*:1]~[D1]>>[*:1]",
         "[*:1]~[D2]~[*:2]>>[*:1]-[*:2]",
@@ -288,7 +285,7 @@ def delete_atom() -> str:
 
 
 def append_atom() -> str:
-    """Reaction SMARTS to append an atom to a molecule"""
+    """Reaction SMARTS to append an atom to a molecule."""
     choices = [
         ["single", ["C", "N", "O", "F", "S", "Cl", "Br"], 7 * [1.0 / 7.0]],
         ["double", ["C", "N", "O"], 3 * [1.0 / 3.0]],
@@ -312,7 +309,7 @@ def append_atom() -> str:
 
 
 def insert_atom() -> str:
-    """Reaction SMARTS to insert an atom into a molecule"""
+    """Reaction SMARTS to insert an atom into a molecule."""
     choices = [
         ["single", ["C", "N", "O", "S"], 4 * [1.0 / 4.0]],
         ["double", ["C", "N"], 2 * [1.0 / 2.0]],
@@ -336,7 +333,7 @@ def insert_atom() -> str:
 
 
 def change_bond_order() -> str:
-    """Reaction SMARTS to change bond order in a molecule"""
+    """Reaction SMARTS to change bond order in a molecule."""
     choices = [
         "[*:1]!-[*:2]>>[*:1]-[*:2]",
         "[*;!H0:1]-[*;!H0:2]>>[*:1]=[*:2]",
@@ -349,12 +346,12 @@ def change_bond_order() -> str:
 
 
 def delete_cyclic_bond() -> str:
-    """Reaction SMARTS to delete an atom into a molecule"""
+    """Reaction SMARTS to delete an atom into a molecule."""
     return "[*:1]@[*:2]>>([*:1].[*:2])"
 
 
 def add_ring() -> str:
-    """Reaction SMARTS to add a 3-6 membered ring to a molecule"""
+    """Reaction SMARTS to add a 3-6 membered ring to a molecule."""
     choices = [
         "[*;!r;!H0:1]~[*;!r:2]~[*;!r;!H0:3]>>[*:1]1~[*:2]~[*:3]1",
         "[*;!r;!H0:1]~[*!r:2]~[*!r:3]~[*;!r;!H0:4]>>[*:1]1~[*:2]~[*:3]~[*:4]1",
@@ -367,7 +364,7 @@ def add_ring() -> str:
 
 
 def change_atom(mol: Chem.Mol) -> str:
-    """Reaction SMARTS to replace a single atom in a molecule"""
+    """Reaction SMARTS to replace a single atom in a molecule."""
     choices = ["#6", "#7", "#8", "#9", "#16", "#17", "#35"]
     p = [0.15, 0.15, 0.14, 0.14, 0.14, 0.14, 0.14]
 

@@ -31,7 +31,7 @@ class LigandGA(GA):
         )
 
     def make_initial_population(self) -> List[SuzukiCatalyst]:
-        """Make initial population as a list of SuzukiCatalysts"""
+        """Make initial population as a list of SuzukiCatalysts."""
         population = []
         while len(population) < self.population_size:
             metal = random.choice(metals_list)
@@ -44,7 +44,7 @@ class LigandGA(GA):
 
     @staticmethod
     def crossover(ind1: SuzukiCatalyst, ind2: SuzukiCatalyst) -> SuzukiCatalyst:
-        """Crossover the ligands of two SuzukiCatalysts"""
+        """Crossover the ligands of two SuzukiCatalysts."""
         ind_type = type(ind1)
         new_ligands = list_crossover(ind1.ligands, ind2.ligands, n_cutpoints=1)
         child = ind_type(ind1.metal, new_ligands)
@@ -53,7 +53,7 @@ class LigandGA(GA):
 
     @staticmethod
     def mutate(ind: SuzukiCatalyst) -> SuzukiCatalyst:
-        """Mutate one ligand of a SuzukiCatalyst"""
+        """Mutate one ligand of a SuzukiCatalyst."""
         new_ligands = list_mutate(ind.ligands, ligands_list)
         ind.ligands = new_ligands
         ind.assemble()

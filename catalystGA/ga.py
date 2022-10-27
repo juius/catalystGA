@@ -58,7 +58,8 @@ class GA(ABC):
         pass
 
     def health_check(self):
-        """Checks if methods 'calculate_score' and '__eq__' are implemented in the individual class
+        """Checks if methods 'calculate_score' and '__eq__' are implemented in
+        the individual class.
 
         Raises:
             NotImplementedError: If methods are not implemented
@@ -76,7 +77,7 @@ class GA(ABC):
         return individual
 
     def calculate_scores(self, population: list) -> list:
-        """Calculates scores for all individuals in the population
+        """Calculates scores for all individuals in the population.
 
         Args:
             population (List): List of individuals
@@ -116,7 +117,7 @@ class GA(ABC):
         return population
 
     def calculate_fitness(self, population: list) -> None:
-        """Calculates fitness of all individuals in the population
+        """Calculates fitness of all individuals in the population.
 
         Args:
             population (list): List of individuals
@@ -134,7 +135,7 @@ class GA(ABC):
             ind.fitness = fitness
 
     def reproduce(self, population: list) -> list:
-        """Creates new offspring from the population
+        """Creates new offspring from the population.
 
         Args:
             population (list): List of individuals (parents)
@@ -155,7 +156,8 @@ class GA(ABC):
         return children
 
     def prune(self, population: list) -> list:
-        """Keep the best individuals in the population, cut down to 'population_size'
+        """Keep the best individuals in the population, cut down to
+        'population_size'.
 
         Args:
             population (list): List of all individuals

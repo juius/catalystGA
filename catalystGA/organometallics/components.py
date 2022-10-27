@@ -2,8 +2,8 @@ import math
 from typing import List
 
 from rdkit import Chem
-from rdkit.Chem.rdMolHash import HashFunction, MolHash
 from rdkit.Chem import rdChemReactions, rdDistGeom
+from rdkit.Chem.rdMolHash import HashFunction, MolHash
 
 CARBENE = "#6&v2H0"
 PHOSPHINE = "#15&v3"
@@ -13,7 +13,7 @@ DONORS = [CARBENE, PHOSPHINE, AMINE, OXYGEN]
 
 
 class BaseCatalyst:
-    """Base Class for Metal-Organic Catalysts"""
+    """Base Class for Metal-Organic Catalysts."""
 
     n_ligands = None
 
@@ -50,7 +50,9 @@ class BaseCatalyst:
         pass
 
     def assemble(self, extraLigands=None, chiralTag=None, permutationOrder=None):
-        """Forms dative bonds from Ligands to Metal Center, adds extra Ligands from Reaction SMARTS and sets the chiral tag of the metal center and permutation order of the Ligands
+        """Forms dative bonds from Ligands to Metal Center, adds extra Ligands
+        from Reaction SMARTS and sets the chiral tag of the metal center and
+        permutation order of the Ligands.
 
         Args:
             extraLigands (str, optional): Reaction SMARTS to add ligands to the molecule. Defaults to None.
@@ -89,7 +91,8 @@ class BaseCatalyst:
 
     @staticmethod
     def _setChiralTagAndOrder(atom, chiralTag, chiralPermutation=None):
-        """Sets the chiral tag of an atom and the permutation order of attached ligands
+        """Sets the chiral tag of an atom and the permutation order of attached
+        ligands.
 
         Args:
             atom (Chem.Atom): Atom for which to set the chiral tag/permutation order properties
@@ -110,7 +113,7 @@ class BaseCatalyst:
         pruneRmsThresh=-1,
         **kwargs,
     ):
-        """Embed the Catalyst Molecule using ETKDG
+        """Embed the Catalyst Molecule using ETKDG.
 
         Args:
             extraLigands (str, optional): Reaction SMARTS to add ligands to the molecule. Defaults to None.
@@ -127,7 +130,7 @@ class BaseCatalyst:
         Chem.SanitizeMol(mol3d)
         mol3d = Chem.AddHs(mol3d)
         # Embed with ETKDG
-        cids = rdDistGeom.EmbedMultipleConfs(
+        _ = rdDistGeom.EmbedMultipleConfs(
             mol3d,
             numConfs=numConfs,
             useRandomCoords=useRandomCoords,
@@ -145,7 +148,7 @@ priority = [carben, phosphor, nitrogen, oxygen]
 
 
 class Ligand:
-    """Organic Ligands"""
+    """Organic Ligands."""
 
     def __init__(self, mol, donor_id=None, fixed=False):
         self.mol = mol
@@ -186,7 +189,7 @@ class Ligand:
 
 
 class Metal:
-    """Transition Metal"""
+    """Transition Metal."""
 
     def __init__(self, atom, coordination_number=None):
         if isinstance(atom, str):
