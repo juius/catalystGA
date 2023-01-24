@@ -162,8 +162,8 @@ class GA(ABC):
         while len(children) < self.population_size:
             parent1, parent2 = np.random.choice(population, p=fitness, size=2, replace=False)
             child = self.crossover(parent1, parent2)
-            child.parents = (parent1.idx, parent2.idx)
             if child and check_n_heavy_atoms(child.mol, self.mol_options):
+                child.parents = (parent1.idx, parent2.idx)
                 if random.random() <= self.mutation_rate:
                     child = self.mutate(child)
                     child.mutated = True
@@ -270,7 +270,7 @@ class GA(ABC):
 
     def run(self):
         # print parameters for GA and scoring
-        start_time = time.time()
+        # start_time = time.time()
         self.print_parameters()
         # self.db.write_parameters(self.params2dict())
         if hasattr(self.mol_options.individual_type, "print_scoring_params"):
@@ -292,10 +292,10 @@ class GA(ABC):
             self.population = self.prune(self.population + children)
             self.print_population(self.population, n + 1)
             time_per_gen.append(time.time() - tmp_time)
-            tmp_time = time.time()
+            # tmp_time = time.time()
         self.calculate_fitness(self.population)
         # self.db.add_generation(n + 1, self.population)
         self.append_results(results, gennum=n + 1, detailed=True)
-        self.print_timing(start_time, time.time(), time_per_gen, self.population)
+        # self.print_timing(start_time, time.time(), time_per_gen, self.population)
 
         return results
