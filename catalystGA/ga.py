@@ -11,11 +11,13 @@ import submitit
 from tabulate import tabulate
 
 from catalystGA.filters.size import check_n_heavy_atoms
-from catalystGA.utils import GADatabase, MoleculeOptions, ScoringOptions, catch, param_types
+from catalystGA.utils import GADatabase, MoleculeOptions, ScoringOptions, param_types
 
 
 def rank(list):
-    return [sorted(list).index(x) for x in list]
+    # return [sorted([x if not math.isnan(x) else math.inf for x in list ]).index(x) for x in list]
+    clean_list = [x if not math.isnan(x) else math.inf for x in list]
+    return [index for element, index in sorted(zip(clean_list, range(len(list))))]
 
 
 DB_LOCATION = f"ga_{time.strftime('%Y-%m-%d_%H-%M')}.sqlite"
@@ -71,12 +73,14 @@ class GA(ABC):
                 )
 
     @staticmethod
-    def wrap_scoring(individual):
-        individual.calculate_score()
+    def wrap_scoring(individual, results_dir):
+        print(f"Scoring individual {individual.idx}")
+        individual.calculate_score(results_dir=results_dir)
         print(individual.score)
         return individual
 
     def calculate_scores(self, population: list) -> list:
+
         """Calculates scores for all individuals in the population.
 
         Args:
@@ -87,22 +91,30 @@ class GA(ABC):
         """
         if not self.scoring_options.parallel:
             for ind in population:
-                ind.calculate_score()
+                ind.calculate_score(results_dir=self.scoring_options.results_dir)
         else:
+            # WORK IN PROGRESS
             executor = submitit.AutoExecutor(
                 folder="_scoring_tmp",
             )
             executor.update_parameters(
-                cpus_per_task=self.scoring_options.cpus_per_task,
+                tasks_per_node=self.scoring_options.cpus_per_task,
+                cpus_per_task=self.scoring_options.n_cores,
                 timeout_min=self.scoring_options.timeout_min,
                 slurm_partition=self.scoring_options.slurm_partition,
                 slurm_array_parallelism=self.scoring_options.slurm_array_parallelism,
             )
-            jobs = executor.map_array(self.wrap_scoring, population)
+            jobs = executor.map_array(
+                self.wrap_scoring,
+                population,
+                [self.scoring_options.results_dir for _ in population],
+            )
             # read results, if job terminated with error then return individual without score
-            population = [
-                catch(job.result, handle=lambda e: population[i]) for i, job in enumerate(jobs)
-            ]
+            # population = [
+            #     catch(job.result, handle=lambda e: population[i]) for i, job in enumerate(jobs)
+            # ]
+            for job in jobs:
+                print(job.results())
         # sort population based on score, if score is NaN then it is always last
         population.sort(
             key=lambda x: (self.maximize_score - 0.5) * float("-inf")
@@ -110,6 +122,7 @@ class GA(ABC):
             else x.score,
             reverse=self.maximize_score,
         )
+
         try:
             shutil.rmtree("_scoring_tmp")
         except FileNotFoundError:
@@ -134,7 +147,7 @@ class GA(ABC):
         for ind, fitness in zip(population, normalized_fitness):
             ind.fitness = fitness
 
-    def reproduce(self, population: list) -> list:
+    def reproduce(self, population: list, genid: int) -> list:
         """Creates new offspring from the population.
 
         Args:
@@ -145,14 +158,19 @@ class GA(ABC):
         """
         children = []
         fitness = [ind.fitness for ind in population]
+        ind_idx = 0
         while len(children) < self.population_size:
             parent1, parent2 = np.random.choice(population, p=fitness, size=2, replace=False)
             child = self.crossover(parent1, parent2)
+            child.parents = (parent1.idx, parent2.idx)
             if child and check_n_heavy_atoms(child.mol, self.mol_options):
                 if random.random() <= self.mutation_rate:
                     child = self.mutate(child)
+                    child.mutated = True
                 if child and child not in children and not self.db.exists(child.smiles):
+                    child.idx = (genid, ind_idx)
                     children.append(child)
+                    ind_idx += 1
         return children
 
     def prune(self, population: list) -> list:
@@ -219,7 +237,6 @@ class GA(ABC):
                         params[k] = str(v)
                 else:
                     params[key] = str(param_types(value))
-        print(params)
         return params
 
     @staticmethod
@@ -269,7 +286,7 @@ class GA(ABC):
             self.calculate_fitness(self.population)
             self.db.add_generation(n, self.population)
             self.append_results(results, gennum=n, detailed=True)
-            children = self.reproduce(self.population)
+            children = self.reproduce(self.population, n + 1)
             children = self.calculate_scores(children)
             self.db.add_individuals(n + 1, children)
             self.population = self.prune(self.population + children)
