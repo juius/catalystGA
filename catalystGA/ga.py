@@ -91,7 +91,7 @@ class GA(ABC):
         """
         if not self.scoring_options.parallel:
             for ind in population:
-                ind.calculate_score(results_dir=self.scoring_options.results_dir)
+                ind.calculate_score()
         else:
             # WORK IN PROGRESS
             executor = submitit.AutoExecutor(
