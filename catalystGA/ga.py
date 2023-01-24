@@ -223,7 +223,7 @@ class GA(ABC):
                 print(f"###     Scoring Options    ###\n{tabulate(scoring_params)}\n")
             else:
                 params.append([param, getattr(self, param)])
-                print(f"###      GA Parameters     ###\n{tabulate(params)}\n")
+        print(f"###      GA Parameters     ###\n{tabulate(params)}\n")
 
     def params2dict(self):
         # create params dict
