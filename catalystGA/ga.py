@@ -272,7 +272,7 @@ class GA(ABC):
         # print parameters for GA and scoring
         start_time = time.time()
         self.print_parameters()
-        self.db.write_parameters(self.params2dict())
+        # self.db.write_parameters(self.params2dict())
         if hasattr(self.mol_options.individual_type, "print_scoring_params"):
             self.mol_options.individual_type.print_scoring_params()
         results = []
@@ -280,21 +280,21 @@ class GA(ABC):
         tmp_time = time.time()
         self.population = self.make_initial_population()
         self.population = self.calculate_scores(self.population)
-        self.db.add_individuals(0, self.population)
+        # self.db.add_individuals(0, self.population)
         self.print_population(self.population, 0)
         for n in range(0, self.n_generations):
             self.calculate_fitness(self.population)
-            self.db.add_generation(n, self.population)
+            # self.db.add_generation(n, self.population)
             self.append_results(results, gennum=n, detailed=True)
             children = self.reproduce(self.population, n + 1)
             children = self.calculate_scores(children)
-            self.db.add_individuals(n + 1, children)
+            # self.db.add_individuals(n + 1, children)
             self.population = self.prune(self.population + children)
             self.print_population(self.population, n + 1)
             time_per_gen.append(time.time() - tmp_time)
             tmp_time = time.time()
         self.calculate_fitness(self.population)
-        self.db.add_generation(n + 1, self.population)
+        # self.db.add_generation(n + 1, self.population)
         self.append_results(results, gennum=n + 1, detailed=True)
         self.print_timing(start_time, time.time(), time_per_gen, self.population)
 
