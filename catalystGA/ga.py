@@ -166,7 +166,8 @@ class GA(ABC):
                 child.parents = (parent1.idx, parent2.idx)
                 if random.random() <= self.mutation_rate:
                     child = self.mutate(child)
-                    child.mutated = True
+                    if child:
+                        child.mutated = True
                 if child and child not in children and not self.db.exists(child.smiles):
                     child.idx = (genid, ind_idx)
                     children.append(child)
