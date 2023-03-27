@@ -3,6 +3,7 @@ import random
 from typing import List
 
 import numpy as np
+from hide_warnings import hide_warnings
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -232,6 +233,7 @@ def crossover_non_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or No
     return None
 
 
+@hide_warnings
 def graph_crossover(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
     """Performs crossover between two molecules, either via ring system or non-
     ring system.
@@ -243,8 +245,9 @@ def graph_crossover(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
     Returns:
         Chem.Mol or None: Output molecule or None if molecule did not pass checks
     """
-    parent_A = copy.deepcopy(parent_A)
-    parent_B = copy.deepcopy(parent_B)
+    parent_A = Chem.RemoveHs(parent_A)
+    parent_B = Chem.RemoveHs(parent_B)
+
     parent_smiles = [Chem.MolToSmiles(parent_A), Chem.MolToSmiles(parent_B)]
     try:
         Chem.Kekulize(parent_A, clearAromaticFlags=True)
@@ -258,6 +261,7 @@ def graph_crossover(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
                 new_smiles = Chem.MolToSmiles(new_mol)
             if new_mol != None and new_smiles not in parent_smiles:
                 Chem.SanitizeMol(new_mol)
+                _remove_radicals(new_mol)
                 return new_mol
         else:
             new_mol = crossover_ring(parent_A, parent_B)
@@ -265,6 +269,7 @@ def graph_crossover(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
                 new_smiles = Chem.MolToSmiles(new_mol)
             if new_mol != None and new_smiles not in parent_smiles:
                 Chem.SanitizeMol(new_mol)
+                _remove_radicals(new_mol)
                 return new_mol
 
     return None
@@ -378,6 +383,7 @@ def change_atom(mol: Chem.Mol) -> str:
     return "[X:1]>>[Y:1]".replace("X", X).replace("Y", Y)
 
 
+@hide_warnings
 def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
     """Performs mutation on molecule (add, remove or replace bond or atom)
 
@@ -387,7 +393,7 @@ def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
     Returns:
         Chem.Mol or None: Output molecule or None if molecule did not pass checks
     """
-    mol = copy.deepcopy(mol)
+    mol = Chem.RemoveHs(mol)
     Chem.Kekulize(mol, clearAromaticFlags=True)
     p = [0.15, 0.14, 0.14, 0.14, 0.14, 0.14, 0.15]
     for i in range(10):
@@ -414,6 +420,16 @@ def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
         if len(new_mols) > 0:
             new_mol = random.choice(new_mols)
             Chem.SanitizeMol(new_mol)
+            _remove_radicals(new_mol)
             return new_mol
 
     return None
+
+
+def _remove_radicals(mol):
+    FREE_RADICAL = "[#6&v3+0,#7&v2+0]"
+    for match in mol.GetSubstructMatches(Chem.MolFromSmarts(FREE_RADICAL)):
+        atom = mol.GetAtomWithIdx(match[0])
+        atom.SetNumRadicalElectrons(0)
+        atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
+    Chem.SanitizeMol(mol)

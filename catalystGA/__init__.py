@@ -1,3 +1,3 @@
+from catalystGA.components import BaseCatalyst, Ligand, Metal
 from catalystGA.ga import GA
-from catalystGA.organometallics.components import BaseCatalyst, Ligand, Metal
-from catalystGA.organometallics.template import StructureTemplate
+from catalystGA.modifiers import gaussian

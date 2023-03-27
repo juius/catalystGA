@@ -1,92 +1,41 @@
-import pickle
 import sqlite3
-from dataclasses import dataclass, field
-from typing import Callable
+import textwrap
+from dataclasses import dataclass
+from typing import Optional
 
-import rdkit
+from rdkit.Chem import rdMolDescriptors
 
-from catalystGA.default_params import DEFAULTS
-from catalystGA.organometallics.components import BaseCatalyst
+from catalystGA.components import BaseCatalyst
 
 
 @dataclass
 class MoleculeOptions:
-    """Set average size and standard deviation of molecule."""
 
     individual_type: BaseCatalyst
-    average_size: int = 5
-    size_std: int = 5
+    min_size: int = 1
+    max_size: int = 30
+    num_rotatable_bonds: Optional[int] = 5
 
-
-@dataclass
-class ScoringOptions:
-    """Set parameters used during scoring."""
-
-    n_cores: int = DEFAULTS["N_CORES"]
-    parallel: bool = True
-    timeout_min: int = DEFAULTS["TIMEOUT_MIN"]
-    # needs to be same as in calculate_score of individual
-    cpus_per_task: int = DEFAULTS["CPUS_PER_TASK"]
-    slurm_partition: str = DEFAULTS["SLURM_PARTITION"]
-    slurm_array_parallelism: int = field(init=False)
-
-    def __post_init__(self):
-        self.slurm_array_parallelism = self.n_cores // self.cpus_per_task
-
-
-def catch(func: Callable, *args, handle=lambda e: e, **kwargs):
-    """Catches an exception handels it.
-
-    Args:
-        func (Callable): Function to evaluate
-        handle (Callable, optional): What to return if Exception.
-    """
-    try:
-        return func(*args, **kwargs)
-    except Exception as e:
-        return handle(e)
-
-
-def sqltype(value):
-    if isinstance(value, int):
-        return "INTEGER"
-    elif isinstance(value, float):
-        return "REAL"
-    elif isinstance(value, str):
-        return "TEXT"
-    else:
-        return "BLOB"
-
-
-def param_types(value):
-    if isinstance(value, list):
-        value = str(value)
-    elif isinstance(value, dict):
-        value = str(value)
-    elif isinstance(value, float):
-        value = float(value)
-    elif isinstance(value, int):
-        value = int(value)
-    else:
-        value = str(value)
-    return value
-
-
-def adapt_mol(mol):
-    return pickle.dumps(mol)
-
-
-sqlite3.register_adapter(
-    rdkit.Chem.rdchem.Mol, adapt_mol
-)  # cannot use pickle.dumps directly because of inadequate argument signature
-sqlite3.register_converter("rdkit.Chem.rdchem.Mol", pickle.loads)
+    def check(self, mol):
+        if not mol:
+            return False
+        elif mol.GetNumHeavyAtoms() < self.min_size or mol.GetNumHeavyAtoms() > self.max_size:
+            return False
+        elif (
+            self.num_rotatable_bonds
+            and rdMolDescriptors.CalcNumRotatableBonds(mol) > self.num_rotatable_bonds
+        ):
+            return False
+        else:
+            return True
 
 
 class GADatabase(object):
-    def __init__(self, location: str) -> None:
+    def __init__(self, location: str, cat_type) -> None:
         """Initialize db class variables."""
         self.connection = sqlite3.connect(location)
         self.cur = self.connection.cursor()
+        self.cat_type = cat_type
 
     def commit(self):
         """commit changes to database."""
@@ -110,18 +59,19 @@ class GADatabase(object):
 
     def create_tables(self) -> None:
         """create a database table if it does not exist already."""
-        self.cur.execute(
+        table = """
+            idx TEXT,
+            smiles TEXT,
+            score REAL,
+            timing REAL,
+            status TEXT
             """
+        for key, value in self.cat_type.save_attributes.items():
+            table += f",\n{key} {value}"
+        self.cur.execute(
+            f"""
           CREATE TABLE IF NOT EXISTS individuals (
-              idx INTEGER,
-              smiles TEXT,
-              score REAL,
-              energy_diff REAL,
-              sa_score REAL,
-              error TEXT,
-              timing REAL,
-              structure1 BLOB,
-              structure2 BLOB
+              {table}
             )
           """
         )
@@ -129,7 +79,8 @@ class GADatabase(object):
         self.cur.execute(
             """
           CREATE TABLE IF NOT EXISTS generations (
-              idx INTEGER,
+              generation INTEGER,
+              idx TEXT,
               smiles TEXT,
               fitness REAL
             )
@@ -141,45 +92,59 @@ class GADatabase(object):
         with self.connection:
             self.cur.executemany(
                 """
-            INSERT INTO generations (idx, smiles, fitness)
-            VALUES (?, ?, ?)
+            INSERT INTO generations (generation, idx, smiles, fitness)
+            VALUES (?, ?, ?, ?)
             """,
-                [(genid, ind.smiles, ind.fitness) for ind in population],
+                [
+                    (genid, f"{ind.idx[0]:03d}-{ind.idx[1]:03d}", ind.smiles, ind.fitness)
+                    for ind in population
+                ],
             )
 
     def add_individuals(self, genid, population):
-        """add individuals to the database (smiles, score, error, timing and
-        structures as pickled blobs)"""
-
+        """add individuals to the database (idx, smiles, score, timing, status
+        and 'save_attributes')"""
+        columns = ["idx", "smiles", "score", "timing", "status"]
+        columns += list(self.cat_type.save_attributes.keys())
         with self.connection:
             self.cur.executemany(
-                """
-            INSERT INTO individuals (idx, smiles, score, error, timing, structure1, structure2)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                f"""
+            INSERT INTO individuals ({', '.join(columns)})
+            VALUES ({', '.join(['?'] * len(columns))})
             """,
                 [
                     (
-                        genid,
+                        f"{ind.idx[0]:03d}-{ind.idx[1]:03d}",
                         ind.smiles,
                         ind.score,
-                        ind.error,
                         ind.timing,
-                        ind.structure1,
-                        ind.structure2,
+                        ind.error,
+                    )
+                    + tuple(
+                        [
+                            ind.__getattribute__(key)
+                            for key in list(self.cat_type.save_attributes.keys())
+                        ]
                     )
                     for ind in population
                 ],
             )
 
-    def write_parameters(self, params):
-        """write parameters to database."""
-        with self.connection:
-            self.cur.execute(
-                f"""CREATE TABLE IF NOT EXISTS parameters(
-                    {', '.join([f'{key} {sqltype(value)}' for key, value in params.items()])}
-                    )"""
-            )
-            insert_params = "INSERT INTO parameters ({}) VALUES ({})".format(
-                ",".join(params), ",".join(["?"] * len(params))
-            )
-            self.cur.execute(insert_params, tuple(params.values()))
+
+def str_table(title=None, headers=[], data=[], column_widths=[75, 14], percision=4, frame=True):
+    table = sum(column_widths) * "=" + "\n" if frame else ""
+    if title:
+        table += textwrap.fill(title, width=len(title)).center(sum(column_widths)) + "\n"
+
+    for i, column in enumerate(headers):
+        table += f"{column:<{column_widths[i]}}"
+    table += "\n" + sum(column_widths) * "-" + "\n"
+
+    for row in zip(*data):
+        for i, d in enumerate(row):
+            if isinstance(d, float):
+                d = f"{d:.0{percision}f}"
+            table += f"{str(d)[:column_widths[i]-2]:<{column_widths[i]}}"
+        table += "\n"
+    table += sum(column_widths) * "=" + "\n" if frame else ""
+    return table

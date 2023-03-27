@@ -1,8 +1,8 @@
 numpy
 pandas
-rdkit
+# rdkit
 networkx
 tabulate
 py3Dmol
 submitit
-xyz2mol @ git+https://github.com/jensengroup/xyz2mol.git@v0.1.2#egg=xyz2mol
+# xyz2mol @ git+https://github.com/jensengroup/xyz2mol.git@v0.1.2#egg=xyz2mol
