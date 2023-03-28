@@ -6,6 +6,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod, abstractstaticmethod
 
+
 import numpy as np
 import submitit
 import tomli
@@ -13,9 +14,10 @@ import tomli
 from catalystGA.utils import GADatabase, MoleculeOptions, str_table
 
 
-def rank(list):
+def rank(list, maximize=True):
     # return [sorted([x if not math.isnan(x) else math.inf for x in list ]).index(x) for x in list]
-    clean_list = [x if not math.isnan(x) else math.inf for x in list]
+    flip = -1 if maximize else 1
+    clean_list = [x if not math.isnan(x) else (flip*math.inf) for x in list]
     return [index for element, index in sorted(zip(clean_list, range(len(list))))]
 
 
@@ -95,6 +97,7 @@ class GA(ABC):
         scoring_temp_dir = self.config["slurm"]["tmp_dir"] + "_" + str(uuid.uuid4())
         executor = submitit.AutoExecutor(
             folder=scoring_temp_dir,
+            cluster='debug'
         )
         executor.update_parameters(
             name=f"scoring_{gen_id}",
@@ -146,7 +149,7 @@ class GA(ABC):
             population (list): List of individuals
         """
         scores = [ind.score for ind in population]
-        ranks = rank(scores)
+        ranks = rank(scores, self.maximize_score)
         fitness = [
             2
             - self.selection_pressure
