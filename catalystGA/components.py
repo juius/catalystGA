@@ -183,7 +183,7 @@ class Ligand:
         return cls(mol, donor_id)
 
     def find_donor_atom(
-        self, smarts_match=True, reference_smiles="[Pd]<-P", n_cores=1, calc_dir="."
+        self, smarts_match=True, reference_smiles="[Mo]<-N", n_cores=1, calc_dir="."
     ):
         if smarts_match:
             donor_id = None
@@ -213,7 +213,7 @@ class Ligand:
                 )
                 binding_energies = []
                 reference_mol = Chem.AddHs(Chem.MolFromSmiles(reference_smiles))
-                central_id = reference_mol.GetSubstructMatch(Chem.MolFromSmarts("[Pd]"))[0]
+                central_id = reference_mol.GetSubstructMatch(Chem.MolFromSmarts("[Mo]"))[0]
                 for match in matches:
                     donor_id = match[0]
                     tmp = Chem.CombineMols(reference_mol, self.mol)

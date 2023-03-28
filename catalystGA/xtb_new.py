@@ -1,9 +1,12 @@
 import logging
 import math
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import List, Tuple
+
+from catalystGA.tooltoad_utils import ac2mol, ac2xyz
 
 XTB_CMD = "xtb"
 
@@ -101,9 +104,7 @@ def write_detailed_input(details_dict: dict, scr: Path):
     for key, value in details_dict.items():
         detailed_input_str += f"${key}\n"
         for subkey, subvalue in value.items():
-            detailed_input_str += (
-                f'\t{subkey}: {", ".join([str(i) for i in subvalue])}\n'
-            )
+            detailed_input_str += f'\t{subkey}: {", ".join([str(i) for i in subvalue])}\n'
     detailed_input_str += "$end\n"
 
     fpath = scr / "details.inp"
@@ -169,6 +170,7 @@ def read_energy(lines: List[str]):
             return energy
     return math.nan
 
+
 def ac2mol(atoms: List[str], coords: List[list], useHueckel=True, **kwargs):
     """Converts atom symbols and coordinates to RDKit molecule."""
     xyz = ac2xyz(atoms, coords)
@@ -176,6 +178,7 @@ def ac2mol(atoms: List[str], coords: List[list], useHueckel=True, **kwargs):
     Chem.SanitizeMol(rdkit_mol)
     _determineConnectivity(rdkit_mol, useHueckel=useHueckel, **kwargs)
     return rdkit_mol
+
 
 def stream(cmd, cwd=None, shell=True):
     """Execute command in directory, and stream stdout."""
