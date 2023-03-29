@@ -1,9 +1,14 @@
 import logging
 import math
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import List, Tuple
+
+import hide_warnings
+from rdkit import Chem
+from rdkit.Chem import rdDetermineBonds
 
 XTB_CMD = "xtb"
 
@@ -101,9 +106,7 @@ def write_detailed_input(details_dict: dict, scr: Path):
     for key, value in details_dict.items():
         detailed_input_str += f"${key}\n"
         for subkey, subvalue in value.items():
-            detailed_input_str += (
-                f'\t{subkey}: {", ".join([str(i) for i in subvalue])}\n'
-            )
+            detailed_input_str += f'\t{subkey}: {", ".join([str(i) for i in subvalue])}\n'
     detailed_input_str += "$end\n"
 
     fpath = scr / "details.inp"
@@ -169,13 +172,6 @@ def read_energy(lines: List[str]):
             return energy
     return math.nan
 
-def ac2mol(atoms: List[str], coords: List[list], useHueckel=True, **kwargs):
-    """Converts atom symbols and coordinates to RDKit molecule."""
-    xyz = ac2xyz(atoms, coords)
-    rdkit_mol = Chem.MolFromXYZBlock(xyz)
-    Chem.SanitizeMol(rdkit_mol)
-    _determineConnectivity(rdkit_mol, useHueckel=useHueckel, **kwargs)
-    return rdkit_mol
 
 def stream(cmd, cwd=None, shell=True):
     """Execute command in directory, and stream stdout."""
@@ -196,3 +192,40 @@ def stream(cmd, cwd=None, shell=True):
     yield stderr
 
     return
+
+
+#######################
+# General RDKit Utils #
+#######################
+
+
+@hide_warnings
+def _determineConnectivity(mol, **kwargs):
+    """Determine bonds in molecule."""
+    try:
+        rdDetermineBonds.DetermineConnectivity(mol, **kwargs)
+    finally:
+        # cleanup extended hueckel files
+        try:
+            os.remove("nul")
+            os.remove("run.out")
+        except FileNotFoundError:
+            pass
+    return mol
+
+
+def ac2xyz(atoms: List[str], coords: List[list]):
+    """Converts atom symbols and coordinates to xyz string."""
+    xyz = f"{len(atoms)}\n\n"
+    for atom, coord in zip(atoms, coords):
+        xyz += f"{atom} {coord[0]:.8f} {coord[1]:.8f} {coord[2]:.8f}\n"
+    return xyz
+
+
+def ac2mol(atoms: List[str], coords: List[list], useHueckel=True, **kwargs):
+    """Converts atom symbols and coordinates to RDKit molecule."""
+    xyz = ac2xyz(atoms, coords)
+    rdkit_mol = Chem.MolFromXYZBlock(xyz)
+    Chem.SanitizeMol(rdkit_mol)
+    _determineConnectivity(rdkit_mol, useHueckel=useHueckel, **kwargs)
+    return rdkit_mol
