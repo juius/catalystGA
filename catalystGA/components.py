@@ -16,6 +16,9 @@ OXYGEN = "#8&v2"
 CO = "C-,v5"
 DONORS = [CARBENE, PHOSPHINE, AMINE, OXYGEN, CO]
 priority = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS]
+TRANSITION_METALS = (
+    "[Sc,Ti,V,Cr,Mn,Fe,Co,Ni,Cu,Zn,Y,Zr,Nb,Mo,Tc,Ru,Rh,Pd,Ag,Cd,Lu,Hf,Ta,W,Re,Os,Ir,Pt,Au,Hg]"
+)
 
 
 class BaseCatalyst:
@@ -213,7 +216,9 @@ class Ligand:
                 )
                 binding_energies = []
                 reference_mol = Chem.AddHs(Chem.MolFromSmiles(reference_smiles))
-                central_id = reference_mol.GetSubstructMatch(Chem.MolFromSmarts("[Pd]"))[0]
+                central_id = reference_mol.GetSubstructMatch(
+                    Chem.MolFromSmarts(TRANSITION_METALS)
+                )[0]
                 for match in matches:
                     donor_id = match[0]
                     tmp = Chem.CombineMols(reference_mol, self.mol)
