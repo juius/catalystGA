@@ -6,7 +6,8 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdChemReactions, rdDistGeom
 from rdkit.Chem.rdMolHash import HashFunction, MolHash
-from xtb import ac2mol, xtb_calculate
+
+from catalystGA.xtb import ac2mol, xtb_calculate
 
 CARBENE = "#6&v2H0"
 PHOSPHINE = "#15&v3"

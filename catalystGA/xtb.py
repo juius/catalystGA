@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import List, Tuple
 
-import hide_warnings
+from hide_warnings import hide_warnings
 from rdkit import Chem
 from rdkit.Chem import rdDetermineBonds
 
