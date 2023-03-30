@@ -13,12 +13,6 @@ import tomli
 from catalystGA.utils import GADatabase, MoleculeOptions, str_table
 
 
-def rank(list, maximize=True):
-    # return [sorted([x if not math.isnan(x) else math.inf for x in list ]).index(x) for x in list]
-    flip = -1 if maximize else 1
-    clean_list = [x if not math.isnan(x) else (flip * math.inf) for x in list]
-    return [index for element, index in sorted(zip(clean_list, range(len(list))))]
-
 
 class GA(ABC):
 
@@ -146,8 +140,15 @@ class GA(ABC):
         Args:
             population (list): List of individuals
         """
-        scores = [ind.score for ind in population]
-        ranks = rank(scores, self.maximize_score)
+
+        flip = -1 if self.maximize_score else 1
+        reverse = bool(flip)
+        # Sort by score
+        population.sort(
+            key=lambda x: flip * math.inf if math.isnan(x.score) else x.score,
+            reverse=reverse,
+        )
+        ranks = [x for x in range(len(population))]
         fitness = [
             2
             - self.selection_pressure
@@ -201,12 +202,15 @@ class GA(ABC):
             list: List of kept individuals
         """
         tmp = list(set(population))
-        tmp.sort(
-            key=lambda x: (self.maximize_score - 0.5) * float("-inf")
-            if math.isnan(x.score)
-            else x.score,
-            reverse=self.maximize_score,
+
+        flip = -1 if self.maximize_score else 1
+        reverse = bool(flip)
+        # Sort by score
+        population.sort(
+            key=lambda x: flip * math.inf if math.isnan(x.score) else x.score,
+            reverse=reverse,
         )
+
         return tmp[: self.population_size]
 
     def append_results(self, results, gennum, detailed=False):
