@@ -13,7 +13,6 @@ import tomli
 from catalystGA.utils import GADatabase, MoleculeOptions, str_table
 
 
-
 class GA(ABC):
 
     DB_LOCATION = f"ga_{time.strftime('%Y-%m-%d_%H-%M')}.sqlite"
@@ -97,7 +96,6 @@ class GA(ABC):
             timeout_min=self.config["slurm"]["timeout_min"],
             slurm_partition=self.config["slurm"]["queue"],
             slurm_array_parallelism=self.config["slurm"]["array_parallelism"],
-            slurm_constraint="v2",
         )
         jobs = executor.map_array(
             self.wrap_scoring,
