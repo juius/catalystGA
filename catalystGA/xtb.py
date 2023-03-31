@@ -46,6 +46,7 @@ def xtb_calculate(
     # tmp_scr = Path(scr)
 
     xyz_file = write_xyz(atoms, coords, tmp_scr)
+    _logger.info(f"File at: {xyz_file}")
     # clean xtb method option
     for k, value in options.items():
         if "gfn" in k.lower():
