@@ -80,6 +80,9 @@ class BaseCatalyst:
         if extraLigands:
             rxn = rdChemReactions.ReactionFromSmarts(extraLigands)
             tmp = rxn.RunReactants((tmp,))[0][0]
+        # Add hydrogens
+        Chem.SanitizeMol(tmp)
+        tmp = Chem.AddHs(tmp)
         # Add ligands
         for ligand in self.ligands:
             tmp = Chem.CombineMols(tmp, ligand.mol)
@@ -240,9 +243,10 @@ class Ligand:
                     # Embed test molecule
                     _ = rdDistGeom.EmbedMultipleConfs(
                         mol,
-                        numConfs=50,
+                        numConfs=25,
                         useRandomCoords=True,
                         pruneRmsThresh=0.1,
+                        randomSeed=42,
                     )
 
                     # Get adjacency matrix
