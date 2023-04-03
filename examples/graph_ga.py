@@ -5,7 +5,7 @@ from typing import List
 from rdkit import Chem
 from suzuki import SuzukiCatalyst
 
-from catalystGA import GA, Ligand, Metal
+from catalystGA import GA, L_Ligand, Metal
 from catalystGA.reproduction_utils import graph_crossover, graph_mutate
 from catalystGA.utils import MoleculeOptions, ScoringOptions
 
@@ -61,7 +61,7 @@ class GraphGA(GA):
         try:
             Chem.SanitizeMol(new_mol)
             # this will catch if new_mol has no donor atom
-            new_ligand = Ligand(new_mol)
+            new_ligand = L_Ligand(new_mol)
             ind1_ligands[idx1] = new_ligand
             child = ind_type(ind1.metal, ind1_ligands)
             child.assemble()
@@ -83,7 +83,7 @@ class GraphGA(GA):
                 return None
         try:
             Chem.SanitizeMol(new_mol)
-            ind.ligands[idx] = Ligand(new_mol)
+            ind.ligands[idx] = L_Ligand(new_mol)
             ind.assemble()
             return ind
         except Exception:
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     ligands_list = []
     with open("data/ligands.smi", "r") as f:
         for line in f:
-            ligands_list.append(Ligand(Chem.MolFromSmiles(line.rstrip())))
+            ligands_list.append(L_Ligand(Chem.MolFromSmiles(line.rstrip())))
 
     metals_list = [Metal("Pd")]
 

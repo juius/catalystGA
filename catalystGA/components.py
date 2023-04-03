@@ -1,5 +1,6 @@
 import logging
 import math
+from abc import ABC, abstractmethod
 from typing import List
 
 import numpy as np
@@ -58,12 +59,13 @@ class BaseCatalyst:
         self.assemble()
         return MolHash(Chem.RemoveHs(self.mol), HashFunction.CanonicalSmiles)
 
+    # TODO
     def health_check(self):
         pass
 
     def assemble(self, extraLigands=None, chiralTag=None, permutationOrder=None):
-        """Forms dative bonds from Ligands to Metal Center, adds extra Ligands
-        from Reaction SMARTS and sets the chiral tag of the metal center and
+        """Forms bonds from Ligands to Metal Center, adds extra Ligands from
+        Reaction SMARTS and sets the chiral tag of the metal center and
         permutation order of the Ligands.
 
         Args:
@@ -76,6 +78,7 @@ class BaseCatalyst:
         """
         # Initialize Mol
         tmp = self.metal.atom
+
         # Add Extra Ligands
         if extraLigands:
             rxn = rdChemReactions.ReactionFromSmarts(extraLigands)
@@ -95,7 +98,7 @@ class BaseCatalyst:
             donor_id = atom_ids[i + 1][ligand.donor_id]
             self.donor_ids.append(donor_id)
             # Add Bond to Central Atom
-            emol.AddBond(donor_id, 0, Chem.BondType.DATIVE)
+            emol.AddBond(donor_id, 0, ligand.bond_type)
         mol = emol.GetMol()
         Chem.SanitizeMol(mol)
         # Set Chiral Tag and Psermutation Order
@@ -159,8 +162,8 @@ class BaseCatalyst:
 _logger = logging.getLogger("ligand")
 
 
-class Ligand:
-    """Organic Ligands."""
+class Ligand(ABC):
+    """Ligand base class."""
 
     def __init__(self, mol, donor_id=None, fixed=False):
         self.mol = mol
@@ -177,7 +180,7 @@ class Ligand:
         return hash(MolHash(self.mol, HashFunction.CanonicalSmiles))
 
     def __eq__(self, other):
-        if isinstance(other, Ligand):
+        if isinstance(other, L_Ligand):
             if self.__hash__() == other.__hash__():
                 return True
         return False
@@ -187,6 +190,34 @@ class Ligand:
         mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
         Chem.SanitizeMol(mol)
         return cls(mol, donor_id)
+
+    @abstractmethod
+    def find_donor_atom(
+        self, smarts_match=True, reference_smiles="[Pd]<-P", n_cores=1, calc_dir="."
+    ):
+        pass
+
+    def set_positions(self, positions):
+        if self.fixed:
+            self.positions = positions
+
+
+class X_Ligand(Ligand):
+    """Covalently bound ligands."""
+
+    def __init__(self, mol, donor_id=None, fixed=False):
+        super.__init__(mol=mol, donor_id=donor_id)
+        self.bond_type = Chem.BondType.SINGLE
+
+    # TODO IMPLEMENT find_donor_atoms
+
+
+class L_Ligand(Ligand):
+    """Dative bound ligands."""
+
+    def __init__(self, mol, donor_id=None, fixed=False):
+        super().__init__(mol=mol, donor_id=donor_id)
+        self.bond_type = Chem.BondType.DATIVE
 
     def find_donor_atom(
         self, smarts_match=True, reference_smiles="[Pd]<-P", n_cores=1, calc_dir="."
