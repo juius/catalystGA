@@ -240,7 +240,7 @@ class Ligand:
                     # Embed test molecule
                     _ = rdDistGeom.EmbedMultipleConfs(
                         mol,
-                        numConfs=50,
+                        numConfs=10,
                         useRandomCoords=True,
                         pruneRmsThresh=0.1,
                     )

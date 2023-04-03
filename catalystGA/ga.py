@@ -4,7 +4,7 @@ import random
 import shutil
 import time
 import uuid
-from abc import ABC, abstractmethod, abstractstaticmethod
+from abc import ABC, abstractmethod
 
 import numpy as np
 import submitit
@@ -44,11 +44,13 @@ class GA(ABC):
     def make_initial_population(self):
         pass
 
-    @abstractstaticmethod
+    @staticmethod
+    @abstractmethod
     def crossover(ind1, ind2):
         pass
 
-    @abstractstaticmethod
+    @staticmethod
+    @abstractmethod
     def mutate(ind):
         pass
 
