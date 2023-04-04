@@ -140,11 +140,12 @@ class GA(ABC):
             population (list): List of individuals
         """
 
-        flip = -1 if self.maximize_score else 1
         # Sort by score
         population.sort(
-            key=lambda x: flip * math.inf if math.isnan(x.score) else x.score,
-            reverse=~self.maximize_score,
+            key=lambda x: (self.maximize_score - 0.5) * float("-inf")
+            if math.isnan(x.score)
+            else x.score,
+            reverse=self.maximize_score,
         )
         ranks = [x for x in range(len(population))]
         fitness = [
