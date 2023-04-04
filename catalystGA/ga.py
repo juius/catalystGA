@@ -1,5 +1,6 @@
 import datetime
 import math
+import os
 import random
 import shutil
 import time
@@ -70,13 +71,6 @@ class GA(ABC):
         with open(self.config_file, mode="rb") as fp:
             self.config = tomli.load(fp)
 
-    @staticmethod
-    def wrap_scoring(individual, n_cores, envvar_scratch):
-        print(f"Scoring individual {individual.idx}")
-        individual.calculate_score(n_cores, envvar_scratch)
-        print(individual.score)
-        return individual
-
     def calculate_scores(self, population: list, gen_id: int) -> list:
 
         """Calculates scores for all individuals in the population.
@@ -87,6 +81,12 @@ class GA(ABC):
         Returns:
             population: List of individuals with scores
         """
+
+        def _wrap_scoring(individual, n_cores, envvar_scratch):
+            print(f"Scoring individual {individual.idx}")
+            individual.calculate_score(n_cores, envvar_scratch)
+            print(individual.score)
+            return individual
 
         scoring_temp_dir = self.config["slurm"]["tmp_dir"] + "_" + str(uuid.uuid4())
         executor = submitit.AutoExecutor(
@@ -100,7 +100,7 @@ class GA(ABC):
             slurm_array_parallelism=self.config["slurm"]["array_parallelism"],
         )
         jobs = executor.map_array(
-            self.wrap_scoring,
+            _wrap_scoring,
             population,
             [self.config["slurm"]["cpus_per_task"]] * len(population),
             [self.config["slurm"]["envvar_scratch"]] * len(population),
@@ -120,13 +120,8 @@ class GA(ABC):
             new_population.append(cat)
         population = new_population
 
-        # sort population based on score, if score is NaN then it is always last
-        population.sort(
-            key=lambda x: (self.maximize_score - 0.5) * float("-inf")
-            if math.isnan(x.score)
-            else x.score,
-            reverse=self.maximize_score,
-        )
+        self.sort_population(population, self.maximize_score)
+
         try:
             shutil.rmtree(scoring_temp_dir)
         except FileNotFoundError:
@@ -141,14 +136,10 @@ class GA(ABC):
             population (list): List of individuals
         """
 
-        flip = -1 if self.maximize_score else 1
-        reverse = False if self.maximize_score else True
         # Sort by score
-        population.sort(
-            key=lambda x: flip * math.inf if math.isnan(x.score) else x.score,
-            reverse=reverse,
-        )
-        ranks = [x for x in range(len(population))]
+        self.sort_population(population, self.maximize_score)
+
+        ranks = list(reversed(range(len(population))))
         fitness = [
             2
             - self.selection_pressure
@@ -202,16 +193,75 @@ class GA(ABC):
             list: List of kept individuals
         """
         tmp = list(set(population))
-
-        flip = -1 if self.maximize_score else 1
-        reverse = False if self.maximize_score else True
-        # Sort by score
-        population.sort(
-            key=lambda x: flip * math.inf if math.isnan(x.score) else x.score,
-            reverse=reverse,
-        )
+        self.sort_population(tmp, self.maximize_score)
 
         return tmp[: self.population_size]
+
+    def find_all_donor_atoms(
+        self, population: list, smarts_match=False, reference_smiles="[Pd]<-P", n_cores=1
+    ):
+        """Find all donor atoms in the population.
+
+        Args:
+            population (list): List of all individuals
+
+        Returns:
+            list: List of donor atoms
+        """
+
+        def _wrap_find_donor_atoms(individual, smarts_match, reference_smiles, n_cores, calc_dir):
+            jobid = os.getenv("SLURM_ARRAY_ID", str(uuid.uuid4()))
+            calc_dir = calc_dir / jobid
+            for ligand in individual.ligands:
+                ligand.find_donor_atom(smarts_match, reference_smiles, n_cores, calc_dir)
+            return [ligand.donor_id for ligand in individual.ligands]
+
+        temp_dir = self.config["slurm"]["tmp_dir"] + "_" + str(uuid.uuid4())
+        executor = submitit.AutoExecutor(
+            folder=temp_dir,
+        )
+        executor.update_parameters(
+            name="find_donor_atoms",
+            cpus_per_task=min([4, self.config["slurm"]["cpus_per_task"]]),
+            timeout_min=self.config["slurm"]["timeout_min"],
+            slurm_partition=self.config["slurm"]["queue"],
+            slurm_array_parallelism=self.config["slurm"]["array_parallelism"],
+        )
+        jobs = executor.map_array(
+            _wrap_find_donor_atoms,
+            population,
+            [smarts_match] * len(population),
+            [reference_smiles] * len(population),
+            [min([4, self.config["slurm"]["cpus_per_task"]])] * len(population),
+            [self.config["slurm"]["envvar_scratch"]] * len(population),
+        )
+        # read results, if job terminated with error then return the donor_id from smarts matching
+        for i, job in enumerate(jobs):
+            try:
+                donor_ids = job.result()
+                # update donor id
+                for ligand, donor_id in zip(population[i].ligands, donor_ids):
+                    ligand.donor_id = donor_id
+            except Exception as e:
+                print(f"Coulnd't find donor atoms for {population[i].smiles} with error {e}")
+
+    @staticmethod
+    def sort_population(population: list, maximize_score: bool) -> list:
+        """Sorts the population by score.
+
+        Args:
+            population (list): List of all individuals
+
+        Returns:
+            list: Sorted list of all individuals
+        """
+        # sort population based on score, if score is NaN then it is always last
+        population.sort(
+            key=lambda x: (maximize_score - 0.5) * float("-inf")
+            if math.isnan(x.score)
+            else x.score,
+            reverse=maximize_score,
+        )
 
     def append_results(self, results, gennum, detailed=False):
         if detailed:
@@ -298,6 +348,7 @@ class GA(ABC):
         time_per_gen = []
         tmp_time = time.time()
         self.population = self.make_initial_population()
+        self.find_all_donor_atoms(self.population)
         self.population = self.calculate_scores(self.population, gen_id=0)
         self.db.add_individuals(0, self.population)
         self.print_population(self.population, 0)
@@ -306,6 +357,7 @@ class GA(ABC):
             self.db.add_generation(n, self.population)
             self.append_results(results, gennum=n, detailed=True)
             children = self.reproduce(self.population, n + 1)
+            self.find_all_donor_atoms(children)
             children = self.calculate_scores(children, gen_id=n + 1)
             self.db.add_individuals(n + 1, children)
             self.population = self.prune(self.population + children)

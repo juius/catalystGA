@@ -80,6 +80,9 @@ class BaseCatalyst:
         if extraLigands:
             rxn = rdChemReactions.ReactionFromSmarts(extraLigands)
             tmp = rxn.RunReactants((tmp,))[0][0]
+        # Add hydrogens
+        Chem.SanitizeMol(tmp)
+        tmp = Chem.AddHs(tmp)
         # Add ligands
         for ligand in self.ligands:
             tmp = Chem.CombineMols(tmp, ligand.mol)
@@ -162,7 +165,7 @@ class Ligand:
     def __init__(self, mol, donor_id=None, fixed=False):
         self.mol = mol
         if not donor_id:
-            self.find_donor_atom()
+            self.find_donor_atom(smarts_match=True)
         else:
             self.donor_id = donor_id
         self.fixed = fixed
@@ -240,9 +243,10 @@ class Ligand:
                     # Embed test molecule
                     _ = rdDistGeom.EmbedMultipleConfs(
                         mol,
-                        numConfs=10,
+                        numConfs=25,
                         useRandomCoords=True,
                         pruneRmsThresh=0.1,
+                        randomSeed=42,
                     )
 
                     # Get adjacency matrix
