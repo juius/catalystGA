@@ -204,7 +204,7 @@ class GA(ABC):
         tmp = list(set(population))
 
         flip = -1 if self.maximize_score else 1
-        reverse = bool(flip)
+        reverse = False if self.maximize_score else True
         # Sort by score
         population.sort(
             key=lambda x: flip * math.inf if math.isnan(x.score) else x.score,
