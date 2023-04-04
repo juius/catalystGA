@@ -69,13 +69,6 @@ class GA(ABC):
         with open(self.config_file, mode="rb") as fp:
             self.config = tomli.load(fp)
 
-    @staticmethod
-    def wrap_scoring(individual, n_cores, envvar_scratch):
-        print(f"Scoring individual {individual.idx}")
-        individual.calculate_score(n_cores, envvar_scratch)
-        print(individual.score)
-        return individual
-
     def calculate_scores(self, population: list, gen_id: int) -> list:
 
         """Calculates scores for all individuals in the population.
@@ -86,6 +79,12 @@ class GA(ABC):
         Returns:
             population: List of individuals with scores
         """
+
+        def _wrap_scoring(individual, n_cores, envvar_scratch):
+            print(f"Scoring individual {individual.idx}")
+            individual.calculate_score(n_cores, envvar_scratch)
+            print(individual.score)
+            return individual
 
         scoring_temp_dir = self.config["slurm"]["tmp_dir"] + "_" + str(uuid.uuid4())
         executor = submitit.AutoExecutor(
@@ -99,7 +98,7 @@ class GA(ABC):
             slurm_array_parallelism=self.config["slurm"]["array_parallelism"],
         )
         jobs = executor.map_array(
-            self.wrap_scoring,
+            _wrap_scoring,
             population,
             [self.config["slurm"]["cpus_per_task"]] * len(population),
             [self.config["slurm"]["envvar_scratch"]] * len(population),
@@ -119,13 +118,8 @@ class GA(ABC):
             new_population.append(cat)
         population = new_population
 
-        # sort population based on score, if score is NaN then it is always last
-        population.sort(
-            key=lambda x: (self.maximize_score - 0.5) * float("-inf")
-            if math.isnan(x.score)
-            else x.score,
-            reverse=self.maximize_score,
-        )
+        self.sort_population(population, self.maximize_score)
+
         try:
             shutil.rmtree(scoring_temp_dir)
         except FileNotFoundError:
@@ -141,13 +135,9 @@ class GA(ABC):
         """
 
         # Sort by score
-        population.sort(
-            key=lambda x: (self.maximize_score - 0.5) * float("-inf")
-            if math.isnan(x.score)
-            else x.score,
-            reverse=self.maximize_score,
-        )
-        ranks = [x for x in range(len(population))]
+        self.sort_population(population, self.maximize_score)
+
+        ranks = list(reversed(range(len(population))))
         fitness = [
             2
             - self.selection_pressure
@@ -201,14 +191,7 @@ class GA(ABC):
             list: List of kept individuals
         """
         tmp = list(set(population))
-
-        flip = -1 if self.maximize_score else 1
-        reverse = bool(flip)
-        # Sort by score
-        population.sort(
-            key=lambda x: flip * math.inf if math.isnan(x.score) else x.score,
-            reverse=reverse,
-        )
+        self.sort_population(tmp, self.maximize_score)
 
         return tmp[: self.population_size]
 
@@ -259,6 +242,24 @@ class GA(ABC):
                     ligand.donor_id = donor_id
             except Exception as e:
                 print(f"Coulnd't find donor atoms for {population[i].smiles} with error {e}")
+
+    @staticmethod
+    def sort_population(population: list, maximize_score: bool) -> list:
+        """Sorts the population by score.
+
+        Args:
+            population (list): List of all individuals
+
+        Returns:
+            list: Sorted list of all individuals
+        """
+        # sort population based on score, if score is NaN then it is always last
+        population.sort(
+            key=lambda x: (maximize_score - 0.5) * float("-inf")
+            if math.isnan(x.score)
+            else x.score,
+            reverse=maximize_score,
+        )
 
     def append_results(self, results, gennum, detailed=False):
         if detailed:
