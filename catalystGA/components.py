@@ -165,7 +165,7 @@ class Ligand:
     def __init__(self, mol, donor_id=None, fixed=False):
         self.mol = mol
         if not donor_id:
-            self.find_donor_atom()
+            self.find_donor_atom(smarts_match=True)
         else:
             self.donor_id = donor_id
         self.fixed = fixed
