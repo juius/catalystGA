@@ -41,6 +41,10 @@ def xtb_calculate(
     # Creat TMP directory
     tempdir = tempfile.TemporaryDirectory(dir=scr, prefix="XTB_")
     tmp_scr = Path(tempdir.name)
+
+    # Use pre-existing dir instead of deleting calcs on the fly
+    # tmp_scr = Path(scr)
+
     xyz_file = write_xyz(atoms, coords, tmp_scr)
     # clean xtb method option
     for k, value in options.items():
