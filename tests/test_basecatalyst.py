@@ -26,6 +26,13 @@ class TestBaseCatalyst(TestCase):
         # Check that the smiles string is correct
         self.assertEqual(self.base_catalyst.smiles, "CCN(C)(C)->[Pd]<-PC(C)(C)C")
 
+    def test_from_smiles(self):
+        # Create a BaseCatalyst object from a smiles string
+        catalyst = BaseCatalyst.from_smiles(self.base_catalyst.smiles)
+
+        # Check that the smiles string is correct
+        self.assertEqual(catalyst.smiles, self.base_catalyst.smiles)
+
     def test_assemble_mol(self):
         # Assemble the catalyst molecule
         catalyst_mol = self.base_catalyst.assemble()
@@ -89,7 +96,9 @@ class TestBaseCatalyst(TestCase):
 
     def test_embed(self):
         # Embed the catalyst molecule
-        catalyst_mol = self.base_catalyst.embed()
+        catalyst_mol = self.base_catalyst.embed(
+            chiralTag=Chem.CHI_SQUAREPLANAR, permutationOrder=2
+        )
 
         # Check that the embedded molecule is a Chem.Mol object
         self.assertIsInstance(catalyst_mol, Chem.Mol)
