@@ -6,6 +6,7 @@ import shutil
 import time
 import uuid
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import numpy as np
 import submitit
@@ -26,6 +27,7 @@ class GA(ABC):
         maximize_score=True,
         selection_pressure=1.5,
         mutation_rate=0.5,
+        donor_atoms_smarts_match=False,
         db_location=DB_LOCATION,
         config_file="./config.toml",
     ):
@@ -34,9 +36,9 @@ class GA(ABC):
         self.n_generations = n_generations
         self.maximize_score = maximize_score
         self.selection_pressure = selection_pressure
-        self.config_file = config_file
-
         self.mutation_rate = mutation_rate
+        self.donor_atoms_smarts_match = donor_atoms_smarts_match
+        self.config_file = config_file
         self.db = GADatabase(db_location, cat_type=mol_options.individual_type)
         self.db.create_tables()
         self.health_check()
@@ -209,9 +211,19 @@ class GA(ABC):
             list: List of donor atoms
         """
 
-        def _wrap_find_donor_atoms(individual, smarts_match, reference_smiles, n_cores, calc_dir):
+        # skip all of this if donor atoms are already known from SMARTS match
+        if self.donor_atoms_smarts_match:
+            return None
+
+        def _wrap_find_donor_atoms(
+            individual, smarts_match, reference_smiles, n_cores, envvar_scratch
+        ):
+            # Setup scrach directory
+            scratch = os.environ.get(envvar_scratch, ".")
+            calc_dir = Path(scratch)
             jobid = os.getenv("SLURM_ARRAY_ID", str(uuid.uuid4()))
             calc_dir = calc_dir / jobid
+            calc_dir.mkdir(exist_ok=True)
             for ligand in individual.ligands:
                 ligand.find_donor_atom(smarts_match, reference_smiles, n_cores, calc_dir)
             return [ligand.donor_id for ligand in individual.ligands]
@@ -244,6 +256,11 @@ class GA(ABC):
                     ligand.donor_id = donor_id
             except Exception as e:
                 print(f"Coulnd't find donor atoms for {population[i].smiles} with error {e}")
+
+        try:
+            shutil.rmtree(temp_dir)
+        except FileNotFoundError:
+            pass
 
     @staticmethod
     def sort_population(population: list, maximize_score: bool) -> list:

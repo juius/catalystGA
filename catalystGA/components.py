@@ -49,6 +49,45 @@ class BaseCatalyst:
                 return True
         return False
 
+    @classmethod
+    def from_smiles(cls, smiles: str):
+        """Create a catalyst from a SMILES string."""
+        mol = Chem.MolFromSmiles(smiles)
+        assert mol, "Could not parse SMILES string"
+
+        # get transition metal
+        metal_matches = mol.GetSubstructMatches(Chem.MolFromSmarts(TRANSITION_METALS))
+        assert len(metal_matches) > 0, "No transition metal found in molecule"
+        assert len(metal_matches) < 2, "More than one transition metal found in molecule"
+        metal_id = metal_matches[0][0]
+        metal = Metal(mol.GetAtomWithIdx(metal_id).GetSymbol())
+
+        # label donor atoms
+        for atom in mol.GetAtomWithIdx(metal_id).GetNeighbors():
+            atom.SetBoolProp("donor_atom", True)
+
+        # fragment ligands
+        fragments = Chem.FragmentOnBonds(
+            mol,
+            [bond.GetIdx() for bond in mol.GetAtomWithIdx(metal_id).GetBonds()],
+            addDummies=False,
+        )
+        ligands = []
+        for ligand_mol in Chem.GetMolFrags(fragments, asMols=True):
+            if not ligand_mol.HasSubstructMatch(Chem.MolFromSmarts(TRANSITION_METALS)):
+                # find donor atom
+                for atom in ligand_mol.GetAtoms():
+                    if atom.HasProp("donor_atom"):
+                        donor_id = atom.GetIdx()
+                        break
+                ligand_mol = Chem.AddHs(ligand_mol)
+                Chem.SanitizeMol(ligand_mol)
+                ligands.append(Ligand(ligand_mol, donor_id=donor_id))
+
+        cat = cls(metal, ligands)
+        assert Chem.MolToSmiles(cat.mol) == smiles, "SMILES string does not match input SMILES"
+        return cat
+
     @property
     def mol(self):
         return self.assemble()
