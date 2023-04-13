@@ -80,6 +80,8 @@ class BaseCatalyst:
                     if atom.HasProp("donor_atom"):
                         donor_id = atom.GetIdx()
                         break
+                ligand_mol = Chem.AddHs(ligand_mol)
+                Chem.SanitizeMol(ligand_mol)
                 ligands.append(Ligand(ligand_mol, donor_id=donor_id))
 
         cat = cls(metal, ligands)
