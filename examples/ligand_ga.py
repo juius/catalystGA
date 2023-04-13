@@ -4,7 +4,7 @@ from typing import List
 from rdkit import Chem
 from suzuki import SuzukiCatalyst
 
-from catalystGA import GA, L_Ligand, Metal
+from catalystGA import GA, DativeLigand, Metal
 from catalystGA.reproduction_utils import list_crossover, list_mutate
 from catalystGA.utils import MoleculeOptions, ScoringOptions
 
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     ligands_list = []
     with open("data/ligands.smi", "r") as f:
         for line in f:
-            ligands_list.append(L_Ligand(Chem.MolFromSmiles(line.rstrip())))
+            ligands_list.append(DativeLigand(Chem.MolFromSmiles(line.rstrip())))
 
     metals_list = [Metal("Pd")]
 

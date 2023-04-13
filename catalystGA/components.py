@@ -10,27 +10,45 @@ from rdkit.Chem.rdMolHash import HashFunction, MolHash
 
 from catalystGA.xtb import ac2mol, xtb_calculate
 
+TRANSITION_METALS = (
+    "[Sc,Ti,V,Cr,Mn,Fe,Co,Ni,Cu,Zn,Y,Zr,Nb,Mo,Tc,Ru,Rh,Pd,Ag,Cd,Lu,Hf,Ta,W,Re,Os,Ir,Pt,Au,Hg]"
+)
+
+###  Dative bonds  ###
+
 CARBENE = "#6&v2H0"
 PHOSPHINE = "#15&v3"
 AMINE = "#7&v3"
 OXYGEN = "#8&v2"
 CO = "C-,v5"
-DONORS = [CARBENE, PHOSPHINE, AMINE, OXYGEN, CO]
-priority = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS]
-TRANSITION_METALS = (
-    "[Sc,Ti,V,Cr,Mn,Fe,Co,Ni,Cu,Zn,Y,Zr,Nb,Mo,Tc,Ru,Rh,Pd,Ag,Cd,Lu,Hf,Ta,W,Re,Os,Ir,Pt,Au,Hg]"
-)
+DONORS_dative = [CARBENE, PHOSPHINE, AMINE, OXYGEN, CO]
+priority_dative = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS_dative]
+
+###  Covalent bonds  ###
+
+# Halogens
+HALOGENS = "#9,#17,#35"
+# Hydroxide
+HYDROXIDE = "O;H1"
+# SP3 hybridized carbon
+SP3_CARBON = "#6X4;!H0"
+# SP3 hybridized carbon
+SP2_CARBON = "#6X3;!H0"
+# Sulphur TODO
+sulphur = None
+
+DONORS_covalent = [HALOGENS, HYDROXIDE, SP3_CARBON, SP2_CARBON]
 
 
 class BaseCatalyst:
     """Base Class for Metal-Organic Catalysts."""
 
-    n_ligands = None
     save_attributes = {}
 
     def __init__(self, metal: Chem.Mol, ligands: List):
         self.metal = metal
         self.ligands = ligands
+        self.n_ligands = len(ligands)
         self.score = math.nan
         self.fitness = math.nan
         self.error = ""
@@ -79,11 +97,11 @@ class BaseCatalyst:
                 # find donor atom
                 for atom in ligand_mol.GetAtoms():
                     if atom.HasProp("donor_atom"):
-                        donor_id = atom.GetIdx()
+                        connection_atom_id = atom.GetIdx()
                         break
                 ligand_mol = Chem.AddHs(ligand_mol)
                 Chem.SanitizeMol(ligand_mol)
-                ligands.append(Ligand(ligand_mol, donor_id=donor_id))
+                ligands.append(Ligand(ligand_mol, connection_atom_id=connection_atom_id))
 
         cat = cls(metal, ligands)
         assert Chem.MolToSmiles(cat.mol) == smiles, "SMILES string does not match input SMILES"
@@ -122,25 +140,40 @@ class BaseCatalyst:
         if extraLigands:
             rxn = rdChemReactions.ReactionFromSmarts(extraLigands)
             tmp = rxn.RunReactants((tmp,))[0][0]
+
         # Add hydrogens
         Chem.SanitizeMol(tmp)
         tmp = Chem.AddHs(tmp)
+
         # Add ligands
         for ligand in self.ligands:
             tmp = Chem.CombineMols(tmp, ligand.mol)
-        # Attach ligands to central atom
-        emol = Chem.EditableMol(tmp)
+
+        # Start editing mol
+        emol = Chem.RWMol(tmp)
+        emol.BeginBatchEdit()
+
         atom_ids = Chem.GetMolFrags(tmp)
-        self.donor_ids = []
+        self.donor_idxs = []
         for i, ligand in enumerate(self.ligands):
             # Get donor id in combined mol
-            donor_id = atom_ids[i + 1][ligand.donor_id]
-            self.donor_ids.append(donor_id)
+            connection_atom_id = atom_ids[i + 1][ligand.connection_atom_id]
+            self.donor_idxs.append(connection_atom_id)
             # Add Bond to Central Atom
-            emol.AddBond(donor_id, 0, ligand.bond_type)
+            emol.AddBond(connection_atom_id, 0, ligand.bond_type)
+
+            # Remove halogen atom if the ligand is covalent and with halogen selected
+            if isinstance(ligand, CovalentLigand):
+                if ligand.pattern == HALOGENS:
+                    halogen_idx = atom_ids[i + 1][ligand.halogen_idx]
+                    emol.RemoveAtom(halogen_idx)
+                # TODO NB! IF ATOMS ARE REMOVED THE DONOR IDS THAT ARE SAVED ARE WRONG
+
+        # Commit changes made and get mol
+        emol.CommitBatchEdit()
         mol = emol.GetMol()
         Chem.SanitizeMol(mol)
-        # Set Chiral Tag and Psermutation Order
+        # Set Chiral Tag and Permutation Order
         if chiralTag:
             metal = mol.GetAtomWithIdx(mol.GetSubstructMatch(self.metal.atom)[0])
             self._setChiralTagAndOrder(metal, chiralTag, permutationOrder)
@@ -204,12 +237,12 @@ _logger = logging.getLogger("ligand")
 class Ligand(ABC):
     """Ligand base class."""
 
-    def __init__(self, mol, donor_id=None, fixed=False):
+    def __init__(self, mol, connection_atom_id=None, fixed=False):
         self.mol = mol
-        if not donor_id:
+        if not connection_atom_id:
             self.find_donor_atom(smarts_match=True)
         else:
-            self.donor_id = donor_id
+            self.connection_atom_id = connection_atom_id
         self.fixed = fixed
 
     def __repr__(self):
@@ -219,16 +252,16 @@ class Ligand(ABC):
         return hash(MolHash(self.mol, HashFunction.CanonicalSmiles))
 
     def __eq__(self, other):
-        if isinstance(other, L_Ligand):
+        if isinstance(other, Ligand):
             if self.__hash__() == other.__hash__():
                 return True
         return False
 
     @classmethod
-    def from_smiles(cls, smiles: str, donor_id=None):
+    def from_smiles(cls, smiles: str, connection_atom_id=None):
         mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
         Chem.SanitizeMol(mol)
-        return cls(mol, donor_id)
+        return cls(mol, connection_atom_id)
 
     @abstractmethod
     def find_donor_atom(
@@ -241,46 +274,79 @@ class Ligand(ABC):
             self.positions = positions
 
 
-class X_Ligand(Ligand):
+class CovalentLigand(Ligand):
     """Covalently bound ligands."""
 
-    def __init__(self, mol, donor_id=None, fixed=False):
-        super.__init__(mol=mol, donor_id=donor_id)
+    def __init__(self, mol, connection_atom_id=None, fixed=False):
+        super().__init__(mol=mol, connection_atom_id=connection_atom_id)
         self.bond_type = Chem.BondType.SINGLE
 
-    # TODO IMPLEMENT find_donor_atoms
+    def find_donor_atom(
+        self, smarts_match=True, reference_smiles="[Mo]<-C", n_cores=1, calc_dir="."
+    ):
+
+        if smarts_match:
+            connection_atom_id = None
+            for pattern in DONORS_covalent:
+
+                p = Chem.MolFromSmarts("[" + pattern + "]")
+                match = self.mol.GetSubstructMatch(p)
+
+                if len(match) > 0:
+                    # Ensure that neighbors to HALOGENS are donors
+                    if pattern == HALOGENS:
+                        # Get Neighbor atom
+                        neighbours = self.mol.GetAtomWithIdx(match[0]).GetNeighbors()
+                        connection_atom_id = neighbours[0].GetIdx()
+
+                        # Save halogen atom idx
+                        self.halogen_idx = match[0]
+                    else:
+                        connection_atom_id = match[0]
+                    # Set the type of donor atom that was found
+                    self.pattern = pattern
+                    break
+            if not isinstance(connection_atom_id, int):
+                raise Warning(
+                    f"No donor atom found for Ligand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
+                )
+        else:
+            raise NotImplementedError("Bonding site selection not implemented yet")
+
+        # Set donor id on ligand
+        self.connection_atom_id = connection_atom_id
 
 
-class L_Ligand(Ligand):
+class DativeLigand(Ligand):
     """Dative bound ligands."""
 
-    def __init__(self, mol, donor_id=None, fixed=False):
-        super().__init__(mol=mol, donor_id=donor_id)
+    def __init__(self, mol, connection_atom_id=None, fixed=False):
+        super().__init__(mol=mol, connection_atom_id=connection_atom_id)
         self.bond_type = Chem.BondType.DATIVE
 
     def find_donor_atom(
         self, smarts_match=True, reference_smiles="[Pd]<-P", n_cores=1, calc_dir="."
     ):
         if smarts_match:
-            donor_id = None
-            for p in priority:
+            connection_atom_id = None
+            for p in priority_dative:
                 match = self.mol.GetSubstructMatch(p)
                 if len(match) > 0:
-                    donor_id = match[0]
+                    connection_atom_id = match[0]
                     break
-            if not isinstance(donor_id, int):
+            if not isinstance(connection_atom_id, int):
                 raise Warning(
                     f"No donor atom found for Ligand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
             # Find all possible donor atoms
-            pattern = Chem.MolFromSmarts("[" + ",".join(DONORS) + "]")
+            pattern = Chem.MolFromSmarts("[" + ",".join(DONORS_dative) + "]")
             matches = self.mol.GetSubstructMatches(pattern)
 
             if len(matches) == 0:
                 raise ValueError("No donor atoms found in ligand.")
             elif len(matches) == 1:
-                donor_id = matches[0][0]
+                connection_atom_id = matches[0][0]
             else:
                 # Make all possible constitutional isomers
                 _logger.info(f"Found {len(matches)} possible donor atoms in ligand.")
@@ -293,7 +359,7 @@ class L_Ligand(Ligand):
                     Chem.MolFromSmarts(TRANSITION_METALS)
                 )[0]
                 for match in matches:
-                    donor_id = match[0]
+                    connection_atom_id = match[0]
                     tmp = Chem.CombineMols(reference_mol, self.mol)
                     # Attach ligands to central atom
                     emol = Chem.EditableMol(tmp)
@@ -358,13 +424,13 @@ class L_Ligand(Ligand):
                             scr=calc_dir,
                             n_cores=n_cores,
                         )
-                        results.append((donor_id, sp_energy))
+                        results.append((connection_atom_id, sp_energy))
                         _logger.info(
-                            f"{('{:>10}{:>10}{:>25}{:>25}').format(donor_id, cid, round(ff_energy, 4), round(sp_energy, 4))}"
+                            f"{('{:>10}{:>10}{:>25}{:>25}').format(connection_atom_id, cid, round(ff_energy, 4), round(sp_energy, 4))}"
                         )
 
                     if len(results) == 0:
-                        results.append((donor_id, np.nan))
+                        results.append((connection_atom_id, np.nan))
 
                     results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
                     binding_energies.append(results[0])
@@ -376,21 +442,21 @@ class L_Ligand(Ligand):
                         "Donor ID", "Atom Type", "Binding Energy [Hartree]"
                     )
                 )
-                for donor_id, energy in binding_energies:
+                for connection_atom_id, energy in binding_energies:
                     _logger.info(
                         ("{:>12}{:>12}{:>27}").format(
-                            donor_id,
-                            self.mol.GetAtomWithIdx(donor_id).GetSymbol(),
+                            connection_atom_id,
+                            self.mol.GetAtomWithIdx(connection_atom_id).GetSymbol(),
                             round(energy, 4),
                         )
                     )
 
-                donor_id = binding_energies[0][0]
+                connection_atom_id = binding_energies[0][0]
 
                 _logger.info(
-                    f"\nDonor atom: {donor_id} ({self.mol.GetAtomWithIdx(donor_id).GetSymbol()})"
+                    f"\nDonor atom: {connection_atom_id} ({self.mol.GetAtomWithIdx(connection_atom_id).GetSymbol()})"
                 )
-        self.donor_id = donor_id
+        self.connection_atom_id = connection_atom_id
 
     def set_positions(self, positions):
         if self.fixed:

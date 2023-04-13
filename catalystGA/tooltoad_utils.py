@@ -2,8 +2,6 @@ import os
 import subprocess
 from typing import List
 
-import networkx as nx
-import numpy as np
 from hide_warnings import hide_warnings
 from rdkit import Chem
 from rdkit.Chem import rdDetermineBonds
@@ -68,15 +66,3 @@ def ac2mol(atoms: List[str], coords: List[list], useHueckel=True, **kwargs):
     Chem.SanitizeMol(rdkit_mol)
     _determineConnectivity(rdkit_mol, useHueckel=useHueckel, **kwargs)
     return rdkit_mol
-
-
-def iteratively_determine_bonds(mol, linspace=np.linspace(0.3, 0.1, 30)):
-    """Iteratively determine bonds until the molecule is connected."""
-    for threshold in linspace:
-        _determineConnectivity(mol, useHueckel=True)
-        adjacency = Chem.GetAdjacencyMatrix(mol, force=True)
-        graph = nx.from_numpy_array(adjacency)
-        if nx.is_connected(graph):
-            break
-    if not nx.is_connected(graph):
-        raise ValueError("Molecule contains disconnected fragments")
