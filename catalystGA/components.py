@@ -70,8 +70,18 @@ class BaseCatalyst:
 
     @classmethod
     def from_smiles(cls, smiles: str):
-        """Create a catalyst from a SMILES string."""
+        """Generate Catalyst from SMILES string. Requires a custom version of
+        RDKit to work with dative bonds from atoms with unpaired electrons. See
+        Github issue #6287 and pull request #6288.
+
+        Args:
+            smiles (str): SMILES string of Catalyst
+
+        Returns:
+            Instance of Catalyst Class
+        """
         mol = Chem.MolFromSmiles(smiles)
+        test_smiles = MolHash(Chem.RemoveHs(mol), HashFunction.CanonicalSmiles)
         assert mol, "Could not parse SMILES string"
 
         # get transition metal
@@ -94,6 +104,7 @@ class BaseCatalyst:
         ligands = []
         for ligand_mol in Chem.GetMolFrags(fragments, asMols=True):
             if not ligand_mol.HasSubstructMatch(Chem.MolFromSmarts(TRANSITION_METALS)):
+                Chem.SanitizeMol(ligand_mol)
                 # find donor atom
                 for atom in ligand_mol.GetAtoms():
                     if atom.HasProp("donor_atom"):
@@ -104,7 +115,9 @@ class BaseCatalyst:
                 ligands.append(Ligand(ligand_mol, connection_atom_id=connection_atom_id))
 
         cat = cls(metal, ligands)
-        assert Chem.MolToSmiles(cat.mol) == smiles, "SMILES string does not match input SMILES"
+        assert (
+            cat.smiles == test_smiles
+        ), f"SMILES string does not match input SMILES: {cat.smiles} != {test_smiles}"
         return cat
 
     @property
