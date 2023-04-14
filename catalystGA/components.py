@@ -3,8 +3,10 @@ import math
 from typing import List
 
 import numpy as np
+from hide_warnings import hide_warnings
 from rdkit import Chem
 from rdkit.Chem import rdChemReactions, rdDistGeom
+from rdkit.Chem.MolStandardize import rdMolStandardize
 from rdkit.Chem.rdMolHash import HashFunction, MolHash
 
 from catalystGA.xtb import ac2mol, xtb_calculate
@@ -50,10 +52,9 @@ class BaseCatalyst:
         return False
 
     @classmethod
+    @hide_warnings  # Suppress MetalDisconnector output
     def from_smiles(cls, smiles: str):
-        """Generate Catalyst from SMILES string. Requires a custom version of
-        RDKit to work with dative bonds from atoms with unpaired electrons. See
-        Github issue #6287 and pull request #6288.
+        """Generate Catalyst from SMILES string.
 
         Args:
             smiles (str): SMILES string of Catalyst
@@ -76,12 +77,8 @@ class BaseCatalyst:
         for atom in mol.GetAtomWithIdx(metal_id).GetNeighbors():
             atom.SetBoolProp("donor_atom", True)
 
-        # fragment ligands
-        fragments = Chem.FragmentOnBonds(
-            mol,
-            [bond.GetIdx() for bond in mol.GetAtomWithIdx(metal_id).GetBonds()],
-            addDummies=False,
-        )
+        # fragment complex
+        fragments = rdMolStandardize.DisconnectOrganometallics(mol)
         ligands = []
         for ligand_mol in Chem.GetMolFrags(fragments, asMols=True):
             if not ligand_mol.HasSubstructMatch(Chem.MolFromSmarts(TRANSITION_METALS)):
