@@ -226,7 +226,7 @@ class GA(ABC):
             calc_dir.mkdir(exist_ok=True)
             for ligand in individual.ligands:
                 ligand.find_donor_atom(smarts_match, reference_smiles, n_cores, calc_dir)
-            return [ligand.donor_id for ligand in individual.ligands]
+            return [ligand.connection_atom_id for ligand in individual.ligands]
 
         temp_dir = self.config["slurm"]["tmp_dir"] + "_" + str(uuid.uuid4())
         executor = submitit.AutoExecutor(
@@ -247,13 +247,13 @@ class GA(ABC):
             [min([4, self.config["slurm"]["cpus_per_task"]])] * len(population),
             [self.config["slurm"]["envvar_scratch"]] * len(population),
         )
-        # read results, if job terminated with error then return the donor_id from smarts matching
+        # read results, if job terminated with error then return the connection_atom_id from smarts matching
         for i, job in enumerate(jobs):
             try:
-                donor_ids = job.result()
+                connection_atom_ids = job.result()
                 # update donor id
-                for ligand, donor_id in zip(population[i].ligands, donor_ids):
-                    ligand.donor_id = donor_id
+                for ligand, connection_atom_id in zip(population[i].ligands, connection_atom_ids):
+                    ligand.connection_atom_id = connection_atom_id
             except Exception as e:
                 print(f"Coulnd't find donor atoms for {population[i].smiles} with error {e}")
 
