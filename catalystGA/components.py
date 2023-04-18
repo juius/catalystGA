@@ -169,18 +169,24 @@ class BaseCatalyst:
         atom_ids = Chem.GetMolFrags(tmp)
         self.donor_idxs = []
         for i, ligand in enumerate(self.ligands):
-            # Get donor id in combined mol
-            connection_atom_id = atom_ids[i + 1][ligand.connection_atom_id]
-            self.donor_idxs.append(connection_atom_id)
-            # Add Bond to Central Atom
-            emol.AddBond(connection_atom_id, 0, ligand.bond_type)
 
-            # Remove halogen atom if the ligand is covalent and with halogen selected
-            if isinstance(ligand, CovalentLigand):
-                if ligand.pattern == HALOGENS:
-                    halogen_idx = atom_ids[i + 1][ligand.halogen_idx]
-                    emol.RemoveAtom(halogen_idx)
-                # TODO NB! IF ATOMS ARE REMOVED THE DONOR IDS THAT ARE SAVED ARE WRONG
+            # Add bonds. If the ligand is bidentate, two bonds are added
+            if isinstance(ligand, BidentateLigand):
+                connection_atom_ids = [atom_ids[i + 1][id] for id in ligand.connection_atom_id]
+                for id in connection_atom_ids:
+                    emol.AddBond(id, 0, ligand.bond_type)
+            else:
+                connection_atom_id = atom_ids[i + 1][ligand.connection_atom_id]
+                emol.AddBond(connection_atom_id, 0, ligand.bond_type)
+
+                # Remove halogen atom if the ligand is covalent and with halogen selected
+                if isinstance(ligand, CovalentLigand):
+                    if ligand.pattern == HALOGENS:
+                        halogen_idx = atom_ids[i + 1][ligand.halogen_idx]
+                        emol.RemoveAtom(halogen_idx)
+                    # TODO NB! IF ATOMS ARE REMOVED THE DONOR IDS THAT ARE SAVED ARE WRONG. SHOULD MAYBE JUST NOT SAVE THE IDS.
+
+            self.donor_idxs.append(connection_atom_id)
 
         # Commit changes made and get mol
         emol.CommitBatchEdit()
@@ -314,6 +320,7 @@ class CovalentLigand(Ligand):
 
                         # Save halogen atom idx
                         self.halogen_idx = match[0]
+
                     else:
                         connection_atom_id = match[0]
                     # Set the type of donor atom that was found
@@ -474,6 +481,41 @@ class DativeLigand(Ligand):
     def set_positions(self, positions):
         if self.fixed:
             self.positions = positions
+
+
+class BidentateLigand(Ligand):
+    """Bidentate ligands."""
+
+    def __init__(self, mol, connection_atom_id=None, fixed=False):
+        super().__init__(mol=mol, connection_atom_id=connection_atom_id)
+        self.bond_type = Chem.BondType.DATIVE
+
+    def find_donor_atom(
+        self, smarts_match=True, reference_smiles="[Pd]<-P", n_cores=1, calc_dir="."
+    ):
+        """For this ligand, there are two connection atom ids.
+
+        These are stored in a list
+        """
+
+        connection_atom_id = []
+        if smarts_match:
+            for p in priority_dative:
+                match = self.mol.GetSubstructMatches(p)
+                if len(match) > 1:
+                    connection_atom_id.append(match[0][0])
+                    connection_atom_id.append(match[1][0])
+                    if connection_atom_id:
+                        break
+            if not connection_atom_id:
+                raise Warning(
+                    f"No donor atoms found for Ligand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
+                )
+        else:
+            raise NotImplementedError("Bonding site selection not implemented yet")
+
+        # Set donor id on ligand
+        self.connection_atom_id = connection_atom_id
 
 
 class Metal:
