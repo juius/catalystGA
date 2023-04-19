@@ -331,8 +331,143 @@ class CovalentLigand(Ligand):
                     f"No donor atom found for CovalentLigand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
-            connection_atom_id = 0
-            # raise NotImplementedError("Bonding site selection not implemented yet")
+            # Find all possible donor atoms # TODO SOMETHING WITH THE SMARTS PATTERN MAKES THE MATCH FAIL IF DONE LIKE THE DATIVE LIGAND
+            matches = ()
+            type_match = []
+            for elem in DONORS_covalent:
+                pattern = Chem.MolFromSmarts("[" + elem + "]")
+                if self.mol.GetSubstructMatches(pattern):
+                    matches += self.mol.GetSubstructMatches(pattern)
+                    type_match += [elem] * len(self.mol.GetSubstructMatches(pattern))
+
+            if len(matches) == 0:
+                raise ValueError("No donor atoms found in CovalentLigand")
+            elif len(matches) == 1:
+                connection_atom_id = matches[0][0]
+            else:
+                # Make all possible constitutional isomers
+                _logger.info(f"Found {len(matches)} possible donor atoms in ligand.")
+                _logger.info(
+                    "Generating all possible constitutional isomers and calculating binding energies."
+                )
+                binding_energies = []
+                reference_mol = Chem.AddHs(Chem.MolFromSmiles(reference_smiles))
+                central_id = reference_mol.GetSubstructMatch(
+                    Chem.MolFromSmarts(TRANSITION_METALS)
+                )[0]
+                for match, type in zip(matches, type_match):
+
+                    # If halogen we need to find neighbor
+                    if type == HALOGENS:
+                        neighbours = self.mol.GetAtomWithIdx(match[0]).GetNeighbors()
+                        connection_atom_id = neighbours[0].GetIdx()
+                        halogen_idx = match[0]
+                    else:
+                        connection_atom_id = match[0]
+                    tmp = Chem.CombineMols(reference_mol, self.mol)
+
+                    # Attach ligands to central atom
+                    emol = Chem.EditableMol(tmp)
+                    atom_ids = Chem.GetMolFrags(tmp)
+
+                    # Get donor id in combined mol
+                    comb_donor_id = atom_ids[1][connection_atom_id]
+                    # Add Bond to Central Atom
+                    emol.AddBond(comb_donor_id, central_id, Chem.BondType.SINGLE)
+
+                    if type == HALOGENS:
+                        halogen_idx = atom_ids[1][halogen_idx]
+                        emol.RemoveAtom(halogen_idx)
+                        # TODO NB! IF ATOMS ARE REMOVED THE DONOR IDS THAT ARE SAVED ARE WRONG. SHOULD MAYBE JUST NOT SAVE THE IDS.
+
+                    mol = emol.GetMol()
+                    Chem.SanitizeMol(mol)
+                    metal = mol.GetAtomWithIdx(central_id)
+                    metal.SetChiralTag(Chem.rdchem.ChiralType.CHI_SQUAREPLANAR)
+                    metal.SetIntProp("_chiralPermutation", 2)
+                    Chem.SanitizeMol(mol)
+                    _logger.info(f"\nIsomer: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
+
+                    # Embed test molecule
+                    _ = rdDistGeom.EmbedMultipleConfs(
+                        mol,
+                        numConfs=25,
+                        useRandomCoords=True,
+                        pruneRmsThresh=0.1,
+                        randomSeed=42,
+                    )
+
+                    # Get adjacency matrix
+                    adj = Chem.GetAdjacencyMatrix(mol)
+
+                    # Find lowest energy conformer
+                    atoms = [atom.GetSymbol() for atom in mol.GetAtoms()]
+                    results = []
+                    _logger.info(
+                        ("{:>10}{:>10}{:>25}{:>25}").format(
+                            "Donor ID", "Conf-ID", "GFN-FF OPT [Hartree]", "GFN-2 SP [Hartree]"
+                        )
+                    )
+                    for conf in mol.GetConformers():
+                        cid = conf.GetId()
+                        coords = conf.GetPositions()
+                        # GFN-FF optimization
+                        _, opt_coords, ff_energy = xtb_calculate(
+                            atoms=atoms,
+                            coords=coords,
+                            options={"gfn": "ff", "opt": True},
+                            scr=calc_dir,
+                            n_cores=n_cores,
+                        )
+                        # Check adjacency matrix after optimization
+                        opt_adj = Chem.GetAdjacencyMatrix(ac2mol(atoms, opt_coords))
+
+                        if not np.array_equal(adj, opt_adj):
+                            _logger.warning(
+                                f"\tChange in adjacency matrix after GFN-FF optimization. Skipping conformer {cid}."
+                            )
+                            continue
+
+                        # GFN-2 Single Point calculation
+                        _, _, sp_energy = xtb_calculate(
+                            atoms=atoms,
+                            coords=opt_coords,
+                            options={"gfn": 2},
+                            scr=calc_dir,
+                            n_cores=n_cores,
+                        )
+                        results.append((connection_atom_id, sp_energy))
+                        _logger.info(
+                            f"{('{:>10}{:>10}{:>25}{:>25}').format(connection_atom_id, cid, round(ff_energy, 4), round(sp_energy, 4))}"
+                        )
+
+                    if len(results) == 0:
+                        results.append((connection_atom_id, np.nan))
+
+                    results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
+                    binding_energies.append(results[0])
+                binding_energies.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
+
+                _logger.info("\n\nBinding energies:")
+                _logger.info(
+                    ("{:>12}{:>12}{:>27}").format(
+                        "Donor ID", "Atom Type", "Binding Energy [Hartree]"
+                    )
+                )
+                for connection_atom_id, energy in binding_energies:
+                    _logger.info(
+                        ("{:>12}{:>12}{:>27}").format(
+                            connection_atom_id,
+                            self.mol.GetAtomWithIdx(connection_atom_id).GetSymbol(),
+                            round(energy, 4),
+                        )
+                    )
+
+                connection_atom_id = binding_energies[0][0]
+
+                _logger.info(
+                    f"\nDonor atom: {connection_atom_id} ({self.mol.GetAtomWithIdx(connection_atom_id).GetSymbol()})"
+                )
 
         # Set donor id on ligand
         self.connection_atom_id = connection_atom_id
