@@ -256,10 +256,10 @@ _logger = logging.getLogger("ligand")
 class Ligand(ABC):
     """Ligand base class."""
 
-    def __init__(self, mol, connection_atom_id=None, fixed=False):
+    def __init__(self, mol, connection_atom_id=None, fixed=False, smarts_match=True):
         self.mol = mol
         if not connection_atom_id:
-            self.find_donor_atom(smarts_match=True)
+            self.find_donor_atom(smarts_match=smarts_match)
         else:
             self.connection_atom_id = connection_atom_id
         self.fixed = fixed
@@ -328,7 +328,7 @@ class CovalentLigand(Ligand):
                     break
             if not isinstance(connection_atom_id, int):
                 raise Warning(
-                    f"No donor atom found for Ligand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
+                    f"No donor atom found for CovalentLigand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
             raise NotImplementedError("Bonding site selection not implemented yet")
@@ -356,7 +356,7 @@ class DativeLigand(Ligand):
                     break
             if not isinstance(connection_atom_id, int):
                 raise Warning(
-                    f"No donor atom found for Ligand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
+                    f"No donor atom found for DativeLigand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
             # Find all possible donor atoms
@@ -364,7 +364,7 @@ class DativeLigand(Ligand):
             matches = self.mol.GetSubstructMatches(pattern)
 
             if len(matches) == 0:
-                raise ValueError("No donor atoms found in ligand.")
+                raise ValueError("No donor atoms found in DativeLigand")
             elif len(matches) == 1:
                 connection_atom_id = matches[0][0]
             else:
@@ -505,11 +505,11 @@ class BidentateLigand(Ligand):
                 if len(match) > 1:
                     connection_atom_id.append(match[0][0])
                     connection_atom_id.append(match[1][0])
-                    if connection_atom_id:
+                    if len(connection_atom_id) == 2:
                         break
             if not connection_atom_id:
                 raise Warning(
-                    f"No donor atoms found for Ligand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
+                    f"No donor atoms found for BidentateLigand( {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
             raise NotImplementedError("Bonding site selection not implemented yet")
