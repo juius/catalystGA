@@ -296,8 +296,8 @@ class Ligand(ABC):
 class CovalentLigand(Ligand):
     """Covalently bound ligands."""
 
-    def __init__(self, mol, connection_atom_id=None, fixed=False):
-        super().__init__(mol=mol, connection_atom_id=connection_atom_id)
+    def __init__(self, mol, connection_atom_id=None, fixed=False, smarts_match=True):
+        super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
         self.bond_type = Chem.BondType.SINGLE
 
     def find_donor_atom(
@@ -331,7 +331,8 @@ class CovalentLigand(Ligand):
                     f"No donor atom found for CovalentLigand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
-            raise NotImplementedError("Bonding site selection not implemented yet")
+            connection_atom_id = 0
+            # raise NotImplementedError("Bonding site selection not implemented yet")
 
         # Set donor id on ligand
         self.connection_atom_id = connection_atom_id
@@ -340,8 +341,8 @@ class CovalentLigand(Ligand):
 class DativeLigand(Ligand):
     """Dative bound ligands."""
 
-    def __init__(self, mol, connection_atom_id=None, fixed=False):
-        super().__init__(mol=mol, connection_atom_id=connection_atom_id)
+    def __init__(self, mol, connection_atom_id=None, fixed=False, smarts_match=True):
+        super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
         self.bond_type = Chem.BondType.DATIVE
 
     def find_donor_atom(

@@ -5,7 +5,7 @@ from typing import List
 from rdkit import Chem
 from suzuki import SuzukiCatalyst
 
-from catalystGA import GA, DativeLigand, Metal, X_Ligand
+from catalystGA import GA, CovalentLigand, DativeLigand, Metal
 from catalystGA.reproduction_utils import graph_crossover, graph_mutate
 from catalystGA.utils import MoleculeOptions
 
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     ligands_list = []
     with open("/home/magstr/Documents/genetic_algorithm/data/ligands.smi", "r") as f:
         for line in f:
-            ligands_list.append(X_Ligand(Chem.MolFromSmiles(line.rstrip())))
+            ligands_list.append(CovalentLigand(Chem.MolFromSmiles(line.rstrip())))
 
     metals_list = [Metal("Pd")]
 
