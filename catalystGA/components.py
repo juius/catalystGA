@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 import math
 from abc import ABC, abstractmethod
@@ -25,7 +26,6 @@ DONORS_dative = [CARBENE, PHOSPHINE, AMINE, OXYGEN, CO]
 priority_dative = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS_dative]
 
 ###  Covalent bonds  ###
-
 # Halogens
 HALOGENS = "#9,#17,#35"
 # Hydroxide
@@ -37,7 +37,7 @@ SP2_CARBON = "#6X3;!H0"
 # Sulphur TODO
 sulphur = None
 
-DONORS_covalent = [HALOGENS, HYDROXIDE, SP3_CARBON, SP2_CARBON]
+DONORS_covalent = [HYDROXIDE, SP3_CARBON, SP2_CARBON]
 
 
 class BaseCatalyst:
@@ -67,6 +67,8 @@ class BaseCatalyst:
             if self.__hash__() == other.__hash__():
                 return True
         return False
+
+    # https://stackoverflow.com/questions/10254594/what-makes-a-user-defined-class-unhashable
 
     @classmethod
     def from_smiles(cls, smiles: str):
@@ -271,7 +273,8 @@ class Ligand(ABC):
         return hash(MolHash(self.mol, HashFunction.CanonicalSmiles))
 
     def __eq__(self, other):
-        if isinstance(other, Ligand):
+        # type(self) ensures that different child classes of this base class are not seen as equal
+        if isinstance(other, type(self)):
             if self.__hash__() == other.__hash__():
                 return True
         return False
@@ -301,7 +304,7 @@ class CovalentLigand(Ligand):
         self.bond_type = Chem.BondType.SINGLE
 
     def find_donor_atom(
-        self, smarts_match=True, reference_smiles="[Mo]<-C", n_cores=1, calc_dir="."
+        self, smarts_match=True, reference_smiles="[Mo]<-C", n_cores=1, calc_dir=".", numConfs=3
     ):
 
         if smarts_match:
@@ -391,7 +394,7 @@ class CovalentLigand(Ligand):
                     # Embed test molecule
                     _ = rdDistGeom.EmbedMultipleConfs(
                         mol,
-                        numConfs=25,
+                        numConfs=numConfs,
                         useRandomCoords=True,
                         pruneRmsThresh=0.1,
                         randomSeed=42,
@@ -408,44 +411,58 @@ class CovalentLigand(Ligand):
                             "Donor ID", "Conf-ID", "GFN-FF OPT [Hartree]", "GFN-2 SP [Hartree]"
                         )
                     )
-                    for conf in mol.GetConformers():
-                        cid = conf.GetId()
-                        coords = conf.GetPositions()
-                        # GFN-FF optimization
-                        _, opt_coords, ff_energy = xtb_calculate(
-                            atoms=atoms,
-                            coords=coords,
-                            options={"gfn": "ff", "opt": True},
-                            scr=calc_dir,
-                            n_cores=n_cores,
+
+                    workers = np.min([n_cores, numConfs])
+                    cpus_per_worker = n_cores // workers
+                    # Construct args
+                    args = [
+                        (
+                            atoms,
+                            conf.GetPositions(),
+                            {"gfn": "ff", "opt": "loose"},
+                            calc_dir,
+                            cpus_per_worker,
                         )
+                        for conf in mol.GetConformers()
+                    ]
+                    # Submit to paralell
+                    result = optimize(args, workers)
+
+                    opt_coords_list = []
+                    ff_energies = []
+                    for res in result:
+                        opt_coords = res[1]
                         # Check adjacency matrix after optimization
                         opt_adj = Chem.GetAdjacencyMatrix(ac2mol(atoms, opt_coords))
-
                         if not np.array_equal(adj, opt_adj):
                             _logger.warning(
-                                f"\tChange in adjacency matrix after GFN-FF optimization. Skipping conformer {cid}."
+                                f"\tChange in adjacency matrix after GFN-FF optimization. Skipping conformer"
                             )
                             continue
+                        else:
+                            opt_coords_list.append(opt_coords)
+                            ff_energies.append(res[2])
 
-                        # GFN-2 Single Point calculation
-                        _, _, sp_energy = xtb_calculate(
-                            atoms=atoms,
-                            coords=opt_coords,
-                            options={"gfn": 2},
-                            scr=calc_dir,
-                            n_cores=n_cores,
+                    # Construct args
+                    args = [
+                        (atoms, coords, {"gfn": 2}, calc_dir, n_cores)
+                        for coords in opt_coords_list
+                    ]
+
+                    # Submit to paralell
+                    result_sp = optimize(args, workers)
+
+                    sp_energies = [res[2] for res in result_sp]
+
+                    final_results = [(connection_atom_id, energy) for energy in sp_energies]
+
+                    if len(final_results) == 0:
+                        binding_energies.append((connection_atom_id, np.nan))
+                    else:
+                        final_results.sort(
+                            key=lambda x: float("inf") if math.isnan(x[1]) else x[1]
                         )
-                        results.append((connection_atom_id, sp_energy))
-                        _logger.info(
-                            f"{('{:>10}{:>10}{:>25}{:>25}').format(connection_atom_id, cid, round(ff_energy, 4), round(sp_energy, 4))}"
-                        )
-
-                    if len(results) == 0:
-                        results.append((connection_atom_id, np.nan))
-
-                    results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
-                    binding_energies.append(results[0])
+                        binding_energies.append(final_results[0])
                 binding_energies.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
 
                 _logger.info("\n\nBinding energies:")
@@ -481,7 +498,7 @@ class DativeLigand(Ligand):
         self.bond_type = Chem.BondType.DATIVE
 
     def find_donor_atom(
-        self, smarts_match=True, reference_smiles="[Pd]<-P", n_cores=1, calc_dir="."
+        self, smarts_match=True, reference_smiles="[Pd]<-P", n_cores=1, calc_dir=".", numConfs=3
     ):
         if smarts_match:
             connection_atom_id = None
@@ -535,7 +552,7 @@ class DativeLigand(Ligand):
                     # Embed test molecule
                     _ = rdDistGeom.EmbedMultipleConfs(
                         mol,
-                        numConfs=25,
+                        numConfs=numConfs,
                         useRandomCoords=True,
                         pruneRmsThresh=0.1,
                         randomSeed=42,
@@ -552,44 +569,60 @@ class DativeLigand(Ligand):
                             "Donor ID", "Conf-ID", "GFN-FF OPT [Hartree]", "GFN-2 SP [Hartree]"
                         )
                     )
-                    for conf in mol.GetConformers():
-                        cid = conf.GetId()
-                        coords = conf.GetPositions()
-                        # GFN-FF optimization
-                        _, opt_coords, ff_energy = xtb_calculate(
-                            atoms=atoms,
-                            coords=coords,
-                            options={"gfn": "ff", "opt": True},
-                            scr=calc_dir,
-                            n_cores=n_cores,
+
+                    workers = np.min([n_cores, numConfs])
+                    cpus_per_worker = n_cores // workers
+                    # Construct args
+                    args = [
+                        (
+                            atoms,
+                            conf.GetPositions(),
+                            {"gfn": "ff", "opt": "loose", "charge": 2},
+                            calc_dir,
+                            cpus_per_worker,
                         )
+                        for conf in mol.GetConformers()
+                    ]
+
+                    # Submit to paralell
+                    result = optimize(args, workers)
+
+                    opt_coords_list = []
+                    ff_energies = []
+                    for res in result:
+                        opt_coords = res[1]
                         # Check adjacency matrix after optimization
                         opt_adj = Chem.GetAdjacencyMatrix(ac2mol(atoms, opt_coords))
-
                         if not np.array_equal(adj, opt_adj):
                             _logger.warning(
-                                f"\tChange in adjacency matrix after GFN-FF optimization. Skipping conformer {cid}."
+                                f"\tChange in adjacency matrix after GFN-FF optimization. Skipping conformer"
                             )
                             continue
+                        else:
+                            opt_coords_list.append(opt_coords)
+                            ff_energies.append(res[2])
 
-                        # GFN-2 Single Point calculation
-                        _, _, sp_energy = xtb_calculate(
-                            atoms=atoms,
-                            coords=opt_coords,
-                            options={"gfn": 2},
-                            scr=calc_dir,
-                            n_cores=n_cores,
+                    # Construct args
+                    args = [
+                        (atoms, coords, {"gfn": 2, "charge": 2}, calc_dir, n_cores)
+                        for coords in opt_coords_list
+                    ]
+
+                    # Submit to paralell
+                    result_sp = optimize(args, workers)
+
+                    sp_energies = [res[2] for res in result_sp]
+
+                    final_results = [(connection_atom_id, energy) for energy in sp_energies]
+
+                    if len(final_results) == 0:
+                        binding_energies.append((connection_atom_id, np.nan))
+                    else:
+                        final_results.sort(
+                            key=lambda x: float("inf") if math.isnan(x[1]) else x[1]
                         )
-                        results.append((connection_atom_id, sp_energy))
-                        _logger.info(
-                            f"{('{:>10}{:>10}{:>25}{:>25}').format(connection_atom_id, cid, round(ff_energy, 4), round(sp_energy, 4))}"
-                        )
+                        binding_energies.append(final_results[0])
 
-                    if len(results) == 0:
-                        results.append((connection_atom_id, np.nan))
-
-                    results.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
-                    binding_energies.append(results[0])
                 binding_energies.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
 
                 _logger.info("\n\nBinding energies:")
@@ -622,8 +655,8 @@ class DativeLigand(Ligand):
 class BidentateLigand(Ligand):
     """Bidentate ligands."""
 
-    def __init__(self, mol, connection_atom_id=None, fixed=False):
-        super().__init__(mol=mol, connection_atom_id=connection_atom_id)
+    def __init__(self, mol, connection_atom_id=None, fixed=False, smarts_match=False):
+        super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
         self.bond_type = Chem.BondType.DATIVE
 
     def find_donor_atom(
@@ -634,15 +667,21 @@ class BidentateLigand(Ligand):
         These are stored in a list
         """
 
+        # Alays true for now
+        smarts_match = True
+
         connection_atom_id = []
+        matches = []
+
         if smarts_match:
-            for p in priority_dative:
-                match = self.mol.GetSubstructMatches(p)
-                if len(match) > 1:
-                    connection_atom_id.append(match[0][0])
-                    connection_atom_id.append(match[1][0])
-                    if len(connection_atom_id) == 2:
-                        break
+            # Prioritize amines for bidentates
+            for elem in [AMINE, CARBENE, PHOSPHINE, OXYGEN, CO]:
+                pattern = Chem.MolFromSmarts("[" + elem + "]")
+                if self.mol.GetSubstructMatches(pattern):
+                    matches += self.mol.GetSubstructMatches(pattern)
+            if len(matches) == 2:
+                connection_atom_id.append(matches[0][0])
+                connection_atom_id.append(matches[1][0])
             if not connection_atom_id:
                 raise Warning(
                     f"No donor atoms found for BidentateLigand( {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
@@ -671,3 +710,17 @@ class Metal:
 
     def __repr__(self):
         return f"{self.atom.GetAtoms()[0].GetSymbol()}"
+
+
+def optimize(args, workers):
+    """Do paralell optimization of all the entries in args."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        results = executor.map(
+            xtb_calculate,
+            [arg[0] for arg in args],
+            [arg[1] for arg in args],
+            [arg[2] for arg in args],
+            [arg[3] for arg in args],
+            [arg[4] for arg in args],
+        )
+    return results
