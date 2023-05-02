@@ -50,6 +50,7 @@ class BaseCatalyst:
         self.ligands = ligands
         self.n_ligands = len(ligands)
         self.score = math.nan
+        self.energy = math.nan
         self.fitness = math.nan
         self.error = ""
         self.idx = (-1, -1)
@@ -171,7 +172,6 @@ class BaseCatalyst:
         atom_ids = Chem.GetMolFrags(tmp)
         self.donor_idxs = []
         for i, ligand in enumerate(self.ligands):
-
             # Add bonds. If the ligand is bidentate, two bonds are added
             if isinstance(ligand, BidentateLigand):
                 connection_atom_ids = [atom_ids[i + 1][id] for id in ligand.connection_atom_id]
@@ -304,13 +304,16 @@ class CovalentLigand(Ligand):
         self.bond_type = Chem.BondType.SINGLE
 
     def find_donor_atom(
-        self, smarts_match=True, reference_smiles="[Mo]<-C", n_cores=1, calc_dir=".", numConfs=3
+        self,
+        smarts_match=True,
+        reference_smiles="[Mo]<-C",
+        n_cores=1,
+        calc_dir=".",
+        numConfs=3,
     ):
-
         if smarts_match:
             connection_atom_id = None
             for pattern in DONORS_covalent:
-
                 p = Chem.MolFromSmarts("[" + pattern + "]")
                 match = self.mol.GetSubstructMatch(p)
 
@@ -359,7 +362,6 @@ class CovalentLigand(Ligand):
                     Chem.MolFromSmarts(TRANSITION_METALS)
                 )[0]
                 for match, type in zip(matches, type_match):
-
                     # If halogen we need to find neighbor
                     if type == HALOGENS:
                         neighbours = self.mol.GetAtomWithIdx(match[0]).GetNeighbors()
@@ -408,7 +410,10 @@ class CovalentLigand(Ligand):
                     results = []
                     _logger.info(
                         ("{:>10}{:>10}{:>25}{:>25}").format(
-                            "Donor ID", "Conf-ID", "GFN-FF OPT [Hartree]", "GFN-2 SP [Hartree]"
+                            "Donor ID",
+                            "Conf-ID",
+                            "GFN-FF OPT [Hartree]",
+                            "GFN-2 SP [Hartree]",
                         )
                     )
 
@@ -498,7 +503,12 @@ class DativeLigand(Ligand):
         self.bond_type = Chem.BondType.DATIVE
 
     def find_donor_atom(
-        self, smarts_match=True, reference_smiles="[Pd]<-P", n_cores=1, calc_dir=".", numConfs=3
+        self,
+        smarts_match=True,
+        reference_smiles="[Pd]<-P",
+        n_cores=1,
+        calc_dir=".",
+        numConfs=3,
     ):
         if smarts_match:
             connection_atom_id = None
@@ -566,7 +576,10 @@ class DativeLigand(Ligand):
                     results = []
                     _logger.info(
                         ("{:>10}{:>10}{:>25}{:>25}").format(
-                            "Donor ID", "Conf-ID", "GFN-FF OPT [Hartree]", "GFN-2 SP [Hartree]"
+                            "Donor ID",
+                            "Conf-ID",
+                            "GFN-FF OPT [Hartree]",
+                            "GFN-2 SP [Hartree]",
                         )
                     )
 
@@ -679,6 +692,8 @@ class BidentateLigand(Ligand):
                 pattern = Chem.MolFromSmarts("[" + elem + "]")
                 if self.mol.GetSubstructMatches(pattern):
                     matches += self.mol.GetSubstructMatches(pattern)
+            # Crude way of only handling ligands with 2 clear attachment point.
+            # Only if 2 matches exists the ligand is accepted.
             if len(matches) == 2:
                 connection_atom_id.append(matches[0][0])
                 connection_atom_id.append(matches[1][0])
