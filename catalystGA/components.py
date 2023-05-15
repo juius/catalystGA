@@ -30,14 +30,17 @@ priority_dative = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS
 HALOGENS = "#9,#17,#35"
 # Hydroxide
 HYDROXIDE = "O;H1"
+# Secondary/priary amines
+SECONDARY_AMINE = "#7X3;H1"
+# Secondary/priary amines
+PRIMARY_AMINE = "#7X3;H2"
 # SP3 hybridized carbon
 SP3_CARBON = "#6X4;!H0"
 # SP3 hybridized carbon
 SP2_CARBON = "#6X3;!H0"
-# Sulphur TODO
-sulphur = None
 
-DONORS_covalent = [HYDROXIDE, SP3_CARBON, SP2_CARBON]
+
+DONORS_covalent = [HYDROXIDE, SECONDARY_AMINE, PRIMARY_AMINE, SP3_CARBON, SP2_CARBON]
 
 
 class BaseCatalyst:
