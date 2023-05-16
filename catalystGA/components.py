@@ -7,6 +7,7 @@ from typing import List
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdChemReactions, rdDistGeom
+from rdkit.Chem.rdchem import Mol
 from rdkit.Chem.rdMolHash import HashFunction, MolHash
 
 from catalystGA.xtb import ac2mol, xtb_calculate
@@ -30,17 +31,14 @@ priority_dative = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS
 HALOGENS = "#9,#17,#35"
 # Hydroxide
 HYDROXIDE = "O;H1"
-# Secondary/priary amines
 SECONDARY_AMINE = "#7X3;H1"
-# Secondary/priary amines
 PRIMARY_AMINE = "#7X3;H2"
 # SP3 hybridized carbon
 SP3_CARBON = "#6X4;!H0"
-# SP3 hybridized carbon
+# SP2 hybridized carbon
 SP2_CARBON = "#6X3;!H0"
 
-
-DONORS_covalent = [HYDROXIDE, SECONDARY_AMINE, PRIMARY_AMINE, SP3_CARBON, SP2_CARBON]
+DONORS_covalent = [HYDROXIDE, HALOGENS, SECONDARY_AMINE, PRIMARY_AMINE, SP3_CARBON, SP2_CARBON]
 
 
 class BaseCatalyst:
@@ -48,7 +46,7 @@ class BaseCatalyst:
 
     save_attributes = {}
 
-    def __init__(self, metal: Chem.Mol, ligands: List):
+    def __init__(self, metal: Chem.Mol, ligands: List) -> None:
         self.metal = metal
         self.ligands = ligands
         self.n_ligands = len(ligands)
@@ -66,7 +64,7 @@ class BaseCatalyst:
     def __hash__(self) -> int:
         return hash(self.smiles)
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         if isinstance(other, BaseCatalyst):
             if self.__hash__() == other.__hash__():
                 return True
@@ -127,19 +125,21 @@ class BaseCatalyst:
         return cat
 
     @property
-    def mol(self):
+    def mol(self) -> Mol:
         return self.assemble()
 
     @property
-    def smiles(self):
+    def smiles(self) -> str:
         self.assemble()
         return MolHash(Chem.RemoveHs(self.mol), HashFunction.CanonicalSmiles)
 
     # TODO
-    def health_check(self):
+    def health_check(self) -> None:
         pass
 
-    def assemble(self, extraLigands=None, chiralTag=None, permutationOrder=None):
+    def assemble(
+        self, extraLigands: None = None, chiralTag: None = None, permutationOrder: None = None
+    ) -> Mol:
         """Forms bonds from Ligands to Metal Center, adds extra Ligands from
         Reaction SMARTS and sets the chiral tag of the metal center and
         permutation order of the Ligands.
@@ -261,7 +261,13 @@ _logger = logging.getLogger("ligand")
 class Ligand(ABC):
     """Ligand base class."""
 
-    def __init__(self, mol, connection_atom_id=None, fixed=False, smarts_match=True):
+    def __init__(
+        self,
+        mol: Mol,
+        connection_atom_id: None = None,
+        fixed: bool = False,
+        smarts_match: bool = True,
+    ) -> None:
         self.mol = mol
         if not connection_atom_id:
             self.find_donor_atom(smarts_match=smarts_match)
@@ -302,18 +308,24 @@ class Ligand(ABC):
 class CovalentLigand(Ligand):
     """Covalently bound ligands."""
 
-    def __init__(self, mol, connection_atom_id=None, fixed=False, smarts_match=True):
+    def __init__(
+        self,
+        mol: Mol,
+        connection_atom_id: int = None,
+        fixed: bool = False,
+        smarts_match: bool = True,
+    ) -> None:
         super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
         self.bond_type = Chem.BondType.SINGLE
 
     def find_donor_atom(
         self,
-        smarts_match=True,
-        reference_smiles="[Mo]<-C",
-        n_cores=1,
-        calc_dir=".",
-        numConfs=3,
-    ):
+        smarts_match: bool = True,
+        reference_smiles: str = "[Mo]<-C",
+        n_cores: int = 1,
+        calc_dir: str = ".",
+        numConfs: int = 3,
+    ) -> None:
         if smarts_match:
             connection_atom_id = None
             for pattern in DONORS_covalent:
@@ -501,18 +513,24 @@ class CovalentLigand(Ligand):
 class DativeLigand(Ligand):
     """Dative bound ligands."""
 
-    def __init__(self, mol, connection_atom_id=None, fixed=False, smarts_match=True):
+    def __init__(
+        self,
+        mol: Mol,
+        connection_atom_id: None = None,
+        fixed: bool = False,
+        smarts_match: bool = True,
+    ) -> None:
         super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
         self.bond_type = Chem.BondType.DATIVE
 
     def find_donor_atom(
         self,
-        smarts_match=True,
-        reference_smiles="[Pd]<-P",
-        n_cores=1,
-        calc_dir=".",
-        numConfs=3,
-    ):
+        smarts_match: bool = True,
+        reference_smiles: str = "[Pd]<-P",
+        n_cores: int = 1,
+        calc_dir: str = ".",
+        numConfs: int = 3,
+    ) -> None:
         if smarts_match:
             connection_atom_id = None
             for p in priority_dative:
@@ -714,7 +732,7 @@ class BidentateLigand(Ligand):
 class Metal:
     """Transition Metal."""
 
-    def __init__(self, atom, coordination_number=None):
+    def __init__(self, atom: str, coordination_number: None = None) -> None:
         if isinstance(atom, str):
             self.atom = Chem.MolFromSmiles(f"[{atom}]")
         elif isinstance(atom, Chem.Atom):
