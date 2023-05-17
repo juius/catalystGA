@@ -2,6 +2,7 @@ import concurrent.futures
 import logging
 import math
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -325,7 +326,7 @@ class CovalentLigand(Ligand):
         smarts_match: bool = True,
         reference_smiles: str = "[Mo]<-N#N",
         n_cores: int = 1,
-        calc_dir: str = ".",
+        calc_dir=Path("."),
         numConfs: int = 3,
     ) -> None:
         if smarts_match:
@@ -369,7 +370,7 @@ class CovalentLigand(Ligand):
                 connection_atom_id = matches[0][0]
             else:
                 # Make all possible constitutional isomers
-                _logger.info(f"Found {len(matches)} possible donor atoms in ligand.")
+                _logger.info(f"Found {len(matches)} possible donor atoms in CovalentLigand.")
                 _logger.info(
                     "Generating all possible constitutional isomers and calculating binding energies."
                 )
@@ -577,7 +578,7 @@ class DativeLigand(Ligand):
                 connection_atom_id = matches[0][0]
             else:
                 # Make all possible constitutional isomers
-                _logger.info(f"Found {len(matches)} possible donor atoms in ligand.")
+                _logger.info(f"Found {len(matches)} possible donor atoms for DativeLigand.")
                 _logger.info(
                     "Generating all possible constitutional isomers and calculating binding energies."
                 )
@@ -619,14 +620,6 @@ class DativeLigand(Ligand):
                     # Find lowest energy conformer
                     atoms = [atom.GetSymbol() for atom in mol.GetAtoms()]
                     results = []
-                    _logger.info(
-                        ("{:>10}{:>10}{:>25}{:>25}").format(
-                            "Donor ID",
-                            "Conf-ID",
-                            "GFN-FF OPT [Hartree]",
-                            "GFN-2 SP [Hartree]",
-                        )
-                    )
 
                     workers = np.min([n_cores, numConfs])
                     cpus_per_worker = n_cores // workers
@@ -686,7 +679,7 @@ class DativeLigand(Ligand):
                 _logger.info("\n\nBinding energies:")
                 _logger.info(
                     ("{:>12}{:>12}{:>27}").format(
-                        "Donor ID", "Atom Type", "Binding Energy [Hartree]"
+                        "Donor ID", "Atom Type", "Binding Energy [Hartree] - GFN2-SP"
                     )
                 )
                 for connection_atom_id, energy in binding_energies:
