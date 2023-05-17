@@ -191,6 +191,8 @@ class BaseCatalyst:
                         emol.RemoveAtom(halogen_idx)
                     # TODO NB! IF ATOMS ARE REMOVED THE DONOR IDS THAT ARE SAVED ARE WRONG. SHOULD MAYBE JUST NOT SAVE THE IDS.
 
+            # Remove any explicit hydrogens on the atom. Otherwise this hydrogen gives sanitation error.
+            emol.GetAtomWithIdx(connection_atom_id).SetNumExplicitHs(0)
             self.donor_idxs.append(connection_atom_id)
 
         # Commit changes made and get mol
@@ -321,7 +323,7 @@ class CovalentLigand(Ligand):
     def find_donor_atom(
         self,
         smarts_match: bool = True,
-        reference_smiles: str = "[Mo]<-C",
+        reference_smiles: str = "[Mo]<-N#N",
         n_cores: int = 1,
         calc_dir: str = ".",
         numConfs: int = 3,
@@ -387,11 +389,16 @@ class CovalentLigand(Ligand):
                     tmp = Chem.CombineMols(reference_mol, self.mol)
 
                     # Attach ligands to central atom
-                    emol = Chem.EditableMol(tmp)
+                    emol = Chem.RWMol(tmp)
+                    emol.BeginBatchEdit()
                     atom_ids = Chem.GetMolFrags(tmp)
 
                     # Get donor id in combined mol
                     comb_donor_id = atom_ids[1][connection_atom_id]
+
+                    # Remove any explicit hydrogens on the atom. Otherwise this hydrogen gives sanitation error.
+                    emol.GetAtomWithIdx(comb_donor_id).SetNumExplicitHs(0)
+
                     # Add Bond to Central Atom
                     emol.AddBond(comb_donor_id, central_id, Chem.BondType.SINGLE)
 
@@ -400,8 +407,19 @@ class CovalentLigand(Ligand):
                         emol.RemoveAtom(halogen_idx)
                         # TODO NB! IF ATOMS ARE REMOVED THE DONOR IDS THAT ARE SAVED ARE WRONG. SHOULD MAYBE JUST NOT SAVE THE IDS.
 
+                    emol.CommitBatchEdit()
                     mol = emol.GetMol()
-                    Chem.SanitizeMol(mol)
+
+                    # Try sanitation
+                    try:
+                        Chem.SanitizeMol(mol)
+                    except Exception as e:
+                        _logger.info(
+                            f"Sanitation error for {self.mol} for match, type: {match, type}"
+                        )
+                        _logger.info(f"Traceback : {e}")
+                        continue
+
                     metal = mol.GetAtomWithIdx(central_id)
                     metal.SetChiralTag(Chem.rdchem.ChiralType.CHI_SQUAREPLANAR)
                     metal.SetIntProp("_chiralPermutation", 2)
@@ -409,6 +427,7 @@ class CovalentLigand(Ligand):
                     _logger.info(f"\nIsomer: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
 
                     # Embed test molecule
+                    mol = Chem.AddHs(mol)
                     _ = rdDistGeom.EmbedMultipleConfs(
                         mol,
                         numConfs=numConfs,
@@ -434,6 +453,11 @@ class CovalentLigand(Ligand):
 
                     workers = np.min([n_cores, numConfs])
                     cpus_per_worker = n_cores // workers
+
+                    # Create separate folders for all conformers
+                    calc_dirs = [calc_dir / f"{i}" for i in range(len(mol.GetConformers()))]
+                    [x.mkdir(exist_ok=True) for x in calc_dirs]
+
                     # Construct args
                     args = [
                         (
@@ -443,7 +467,7 @@ class CovalentLigand(Ligand):
                             calc_dir,
                             cpus_per_worker,
                         )
-                        for conf in mol.GetConformers()
+                        for conf, calc_dir in zip(mol.GetConformers(), calc_dirs)
                     ]
                     # Submit to paralell
                     result = optimize(args, workers)
@@ -466,7 +490,7 @@ class CovalentLigand(Ligand):
                     # Construct args
                     args = [
                         (atoms, coords, {"gfn": 2}, calc_dir, n_cores)
-                        for coords in opt_coords_list
+                        for coords, calc_dir in zip(opt_coords_list, calc_dirs)
                     ]
 
                     # Submit to paralell
