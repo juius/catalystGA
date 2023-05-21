@@ -606,6 +606,7 @@ class DativeLigand(Ligand):
                     _logger.info(f"\nIsomer: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
 
                     # Embed test molecule
+                    mol = Chem.AddHs(mol)
                     _ = rdDistGeom.EmbedMultipleConfs(
                         mol,
                         numConfs=numConfs,
