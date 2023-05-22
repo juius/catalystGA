@@ -17,7 +17,7 @@ TRANSITION_METALS = (
     "[Sc,Ti,V,Cr,Mn,Fe,Co,Ni,Cu,Zn,Y,Zr,Nb,Mo,Tc,Ru,Rh,Pd,Ag,Cd,Lu,Hf,Ta,W,Re,Os,Ir,Pt,Au,Hg]"
 )
 
-###  Dative bonds  ###
+###  Dative bond patterns  ###
 
 CARBENE = "#6&v2H0"
 PHOSPHINE = "#15&v3"
@@ -27,11 +27,12 @@ CO = "C-,v5"
 DONORS_dative = [CARBENE, PHOSPHINE, AMINE, OXYGEN, CO]
 priority_dative = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS_dative]
 
-###  Covalent bonds  ###
+###  Covalent bond patterns ###
 # Halogens
 HALOGENS = "#9,#17,#35"
 # Hydroxide
 HYDROXIDE = "O;H1"
+# Amines
 SECONDARY_AMINE = "#7X3;H1"
 PRIMARY_AMINE = "#7X3;H2"
 # SP3 hybridized carbon
@@ -39,7 +40,7 @@ SP3_CARBON = "#6X4;!H0"
 # SP2 hybridized carbon
 SP2_CARBON = "#6X3;!H0"
 
-DONORS_covalent = [HYDROXIDE, HALOGENS, SECONDARY_AMINE, PRIMARY_AMINE, SP3_CARBON, SP2_CARBON]
+DONORS_covalent = [HYDROXIDE, SECONDARY_AMINE, PRIMARY_AMINE, HALOGENS, SP3_CARBON, SP2_CARBON]
 
 
 class BaseCatalyst:
@@ -182,15 +183,29 @@ class BaseCatalyst:
                 for id in connection_atom_ids:
                     emol.AddBond(id, 0, ligand.bond_type)
             else:
-                connection_atom_id = atom_ids[i + 1][ligand.connection_atom_id]
-                emol.AddBond(connection_atom_id, 0, ligand.bond_type)
 
-                # Remove halogen atom if the ligand is covalent and with halogen selected
+                connection_atom_id = ligand.connection_atom_id
+                # If we have CovalentLigand, check if the connection is a halogen.
                 if isinstance(ligand, CovalentLigand):
-                    if ligand.pattern == HALOGENS:
-                        halogen_idx = atom_ids[i + 1][ligand.halogen_idx]
-                        emol.RemoveAtom(halogen_idx)
-                    # TODO NB! IF ATOMS ARE REMOVED THE DONOR IDS THAT ARE SAVED ARE WRONG. SHOULD MAYBE JUST NOT SAVE THE IDS.
+
+                    # Get neighbors to connection atom
+                    neighbours = ligand.mol.GetAtomWithIdx(
+                        ligand.connection_atom_id
+                    ).GetNeighbors()
+                    # Get the anumic nums of the neighbors
+                    neighbours_idx = [n.GetIdx() for n in neighbours]
+                    neighbours_atomid = [
+                        ligand.mol.GetAtomWithIdx(n.GetIdx()).GetAtomicNum() for n in neighbours
+                    ]
+                    # Check the neighbors. If any halogen we remove it.
+                    for atom_id, idx in zip(neighbours_atomid, neighbours_idx):
+                        if atom_id in [9, 17, 35]:
+                            halogen_idx = atom_ids[i + 1][idx]
+                            emol.RemoveAtom(halogen_idx)
+                            break
+                # Add bond to metal.
+                connection_atom_id = atom_ids[i + 1][connection_atom_id]
+                emol.AddBond(connection_atom_id, 0, ligand.bond_type)
 
             # Remove any explicit hydrogens on the atom. Otherwise this hydrogen gives sanitation error.
             emol.GetAtomWithIdx(connection_atom_id).SetNumExplicitHs(0)
@@ -199,12 +214,23 @@ class BaseCatalyst:
         # Commit changes made and get mol
         emol.CommitBatchEdit()
         mol = emol.GetMol()
-        Chem.SanitizeMol(mol)
+
+        # Catch sanitation errors. NB! could lead to error later in workflow.
+        try:
+            Chem.SanitizeMol(mol)
+        except Exception as e:
+            _logger.warning("Sanitation error! Molecule: {mol}")
+            _logger.warning(f"Traceback : {e}")
+
         # Set Chiral Tag and Permutation Order
         if chiralTag:
             metal = mol.GetAtomWithIdx(mol.GetSubstructMatch(self.metal.atom)[0])
             self._setChiralTagAndOrder(metal, chiralTag, permutationOrder)
-        Chem.SanitizeMol(mol)
+        try:
+            Chem.SanitizeMol(mol)
+        except Exception as e:
+            _logger.warning("Sanitation error after chiral tag! Molecule: {mol}")
+            _logger.warning(f"Traceback : {e}")
         return mol
 
     @staticmethod
@@ -336,19 +362,12 @@ class CovalentLigand(Ligand):
                 match = self.mol.GetSubstructMatch(p)
 
                 if len(match) > 0:
-                    # Ensure that neighbors to HALOGENS are donors
+                    # If the chosen pattern is halogen, set the connection id to the halogen neighbor.
                     if pattern == HALOGENS:
-                        # Get Neighbor atom
                         neighbours = self.mol.GetAtomWithIdx(match[0]).GetNeighbors()
                         connection_atom_id = neighbours[0].GetIdx()
-
-                        # Save halogen atom idx
-                        self.halogen_idx = match[0]
-
                     else:
                         connection_atom_id = match[0]
-                    # Set the type of donor atom that was found
-                    self.pattern = pattern
                     break
             if not isinstance(connection_atom_id, int):
                 raise Warning(
@@ -367,7 +386,12 @@ class CovalentLigand(Ligand):
             if len(matches) == 0:
                 raise ValueError("No donor atoms found in CovalentLigand")
             elif len(matches) == 1:
-                connection_atom_id = matches[0][0]
+                # If the 1 match is a halogen set connection atom as neighbor.
+                if HALOGENS in type_match:
+                    neighbours = self.mol.GetAtomWithIdx(matches[0][0]).GetNeighbors()
+                    connection_atom_id = neighbours[0].GetIdx()
+                else:
+                    connection_atom_id = matches[0][0]
             else:
                 # Make all possible constitutional isomers
                 _logger.info(f"Found {len(matches)} possible donor atoms in CovalentLigand.")
@@ -403,6 +427,7 @@ class CovalentLigand(Ligand):
                     # Add Bond to Central Atom
                     emol.AddBond(comb_donor_id, central_id, Chem.BondType.SINGLE)
 
+                    # Remove halogen atom.
                     if type == HALOGENS:
                         halogen_idx = atom_ids[1][halogen_idx]
                         emol.RemoveAtom(halogen_idx)
@@ -425,7 +450,7 @@ class CovalentLigand(Ligand):
                     metal.SetChiralTag(Chem.rdchem.ChiralType.CHI_SQUAREPLANAR)
                     metal.SetIntProp("_chiralPermutation", 2)
                     Chem.SanitizeMol(mol)
-                    _logger.info(f"\nIsomer: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
+                    _logger.info(f"Isomer: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
 
                     # Embed test molecule
                     mol = Chem.AddHs(mol)
@@ -443,14 +468,6 @@ class CovalentLigand(Ligand):
                     # Find lowest energy conformer
                     atoms = [atom.GetSymbol() for atom in mol.GetAtoms()]
                     results = []
-                    _logger.info(
-                        ("{:>10}{:>10}{:>25}{:>25}").format(
-                            "Donor ID",
-                            "Conf-ID",
-                            "GFN-FF OPT [Hartree]",
-                            "GFN-2 SP [Hartree]",
-                        )
-                    )
 
                     workers = np.min([n_cores, numConfs])
                     cpus_per_worker = n_cores // workers
@@ -510,10 +527,10 @@ class CovalentLigand(Ligand):
                         binding_energies.append(final_results[0])
                 binding_energies.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
 
-                _logger.info("\n\nBinding energies:")
+                _logger.info("Binding energies:")
                 _logger.info(
                     ("{:>12}{:>12}{:>27}").format(
-                        "Donor ID", "Atom Type", "Binding Energy [Hartree]"
+                        "Donor ID", "Atom Type", "Binding Energy [Hartree] - (GFN2-SP)"
                     )
                 )
                 for connection_atom_id, energy in binding_energies:
@@ -528,10 +545,9 @@ class CovalentLigand(Ligand):
                 connection_atom_id = binding_energies[0][0]
 
                 _logger.info(
-                    f"\nDonor atom: {connection_atom_id} ({self.mol.GetAtomWithIdx(connection_atom_id).GetSymbol()})"
+                    f"Donor atom: {connection_atom_id} ({self.mol.GetAtomWithIdx(connection_atom_id).GetSymbol()})"
                 )
 
-        # Set donor id on ligand
         self.connection_atom_id = connection_atom_id
 
 
@@ -575,6 +591,8 @@ class DativeLigand(Ligand):
             if len(matches) == 0:
                 raise ValueError("No donor atoms found in DativeLigand")
             elif len(matches) == 1:
+                # Make all possible constitutional isomers
+                _logger.info(f"Found 1 possible donor atoms in DativeLigand.")
                 connection_atom_id = matches[0][0]
             else:
                 # Make all possible constitutional isomers
@@ -603,7 +621,7 @@ class DativeLigand(Ligand):
                     metal.SetChiralTag(Chem.rdchem.ChiralType.CHI_SQUAREPLANAR)
                     metal.SetIntProp("_chiralPermutation", 2)
                     Chem.SanitizeMol(mol)
-                    _logger.info(f"\nIsomer: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
+                    _logger.info(f"Isomer: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
 
                     # Embed test molecule
                     mol = Chem.AddHs(mol)
@@ -677,7 +695,7 @@ class DativeLigand(Ligand):
 
                 binding_energies.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
 
-                _logger.info("\n\nBinding energies:")
+                _logger.info("Binding energies:")
                 _logger.info(
                     ("{:>12}{:>12}{:>27}").format(
                         "Donor ID", "Atom Type", "Binding Energy [Hartree] - GFN2-SP"
@@ -695,7 +713,7 @@ class DativeLigand(Ligand):
                 connection_atom_id = binding_energies[0][0]
 
                 _logger.info(
-                    f"\nDonor atom: {connection_atom_id} ({self.mol.GetAtomWithIdx(connection_atom_id).GetSymbol()})"
+                    f"Donor atom: {connection_atom_id} ({self.mol.GetAtomWithIdx(connection_atom_id).GetSymbol()})"
                 )
         self.connection_atom_id = connection_atom_id
 
