@@ -40,7 +40,7 @@ SP3_CARBON = "#6X4;!H0"
 # SP2 hybridized carbon
 SP2_CARBON = "#6X3;!H0"
 
-DONORS_covalent = [HYDROXIDE, SECONDARY_AMINE, PRIMARY_AMINE, HALOGENS, SP3_CARBON, SP2_CARBON]
+DONORS_covalent = [HYDROXIDE, SECONDARY_AMINE, PRIMARY_AMINE, SP3_CARBON, SP2_CARBON, HALOGENS]
 
 
 class BaseCatalyst:
@@ -370,7 +370,7 @@ class CovalentLigand(Ligand):
                         connection_atom_id = match[0]
                     break
             if not isinstance(connection_atom_id, int):
-                raise Warning(
+                _logger.warning(
                     f"No donor atom found for CovalentLigand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
@@ -384,7 +384,7 @@ class CovalentLigand(Ligand):
                     type_match += [elem] * len(self.mol.GetSubstructMatches(pattern))
 
             if len(matches) == 0:
-                raise ValueError("No donor atoms found in CovalentLigand")
+                _logger.warning("No donor atoms found in CovelentLigand")
             elif len(matches) == 1:
                 # If the 1 match is a halogen set connection atom as neighbor.
                 if HALOGENS in type_match:
@@ -580,7 +580,7 @@ class DativeLigand(Ligand):
                     connection_atom_id = match[0]
                     break
             if not isinstance(connection_atom_id, int):
-                raise Warning(
+                _logger.warning(
                     f"No donor atom found for DativeLigand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
@@ -589,7 +589,9 @@ class DativeLigand(Ligand):
             matches = self.mol.GetSubstructMatches(pattern)
 
             if len(matches) == 0:
-                raise ValueError("No donor atoms found in DativeLigand")
+                _logger.warning(
+                    f"No donor atom found for DativeLigand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
+                )
             elif len(matches) == 1:
                 # Make all possible constitutional isomers
                 _logger.info(f"Found 1 possible donor atoms in DativeLigand.")
@@ -755,7 +757,7 @@ class BidentateLigand(Ligand):
                 connection_atom_id.append(matches[0][0])
                 connection_atom_id.append(matches[1][0])
             if not connection_atom_id:
-                raise Warning(
+                _logger.warning(
                     f"No donor atoms found for BidentateLigand( {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
