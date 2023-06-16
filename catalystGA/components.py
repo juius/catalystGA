@@ -317,6 +317,10 @@ class Ligand(ABC):
                 return True
         return False
 
+    @property
+    def smiles(self) -> str:
+        return MolHash(Chem.RemoveHs(self.mol), HashFunction.CanonicalSmiles)
+
     @classmethod
     def from_smiles(cls, smiles: str, connection_atom_id=None):
         mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
@@ -507,7 +511,7 @@ class CovalentLigand(Ligand):
 
                     # Construct args
                     args = [
-                        (atoms, coords, {"gfn": 2}, calc_dir, n_cores)
+                        (atoms, coords, {"gfn": 2}, calc_dir, cpus_per_worker)
                         for coords, calc_dir in zip(opt_coords_list, calc_dirs)
                     ]
 
@@ -676,7 +680,7 @@ class DativeLigand(Ligand):
 
                     # Construct args
                     args = [
-                        (atoms, coords, {"gfn": 2, "charge": 2}, calc_dir, n_cores)
+                        (atoms, coords, {"gfn": 2, "charge": 2}, calc_dir, cpus_per_worker)
                         for coords in opt_coords_list
                     ]
 
