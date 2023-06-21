@@ -357,7 +357,7 @@ class CovalentLigand(Ligand):
         reference_smiles: str = "[Mo]<-N#N",
         n_cores: int = 1,
         calc_dir=Path("."),
-        numConfs: int = 3,
+        numConfs: int = 20,
     ) -> None:
         if smarts_match:
             connection_atom_id = None
@@ -485,7 +485,7 @@ class CovalentLigand(Ligand):
                         (
                             atoms,
                             conf.GetPositions(),
-                            {"gfn": "ff", "opt": "loose"},
+                            {"gfn": "ff", "opt": "tight"},
                             calc_dir,
                             cpus_per_worker,
                         )
@@ -574,7 +574,7 @@ class DativeLigand(Ligand):
         reference_smiles: str = "[Pd]<-P",
         n_cores: int = 1,
         calc_dir: str = ".",
-        numConfs: int = 3,
+        numConfs: int = 20,
     ) -> None:
         if smarts_match:
             connection_atom_id = None
@@ -653,7 +653,7 @@ class DativeLigand(Ligand):
                         (
                             atoms,
                             conf.GetPositions(),
-                            {"gfn": "ff", "opt": "loose", "charge": 2},
+                            {"gfn": "ff", "opt": "tight", "charge": 2},
                             calc_dir,
                             cpus_per_worker,
                         )

@@ -56,7 +56,7 @@ def xtb_calculate(
                 break
 
     # Options to xTB command
-    cmd = f"{XTB_CMD} --norestart --verbose --parallel {n_cores} "
+    cmd = f"{XTB_CMD} --norestart --parallel {n_cores} "
     for key, value in options.items():
         if value is None or value is True:
             cmd += f"--{key} "
