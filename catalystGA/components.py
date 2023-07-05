@@ -37,6 +37,8 @@ class BaseCatalyst:
         self.error = ""
         self.idx = (-1, -1)
         self.timing = math.nan
+        self.parents = str((-1, -1))
+        self.mutated = 0
         self.health_check()
 
     def __repr__(self):
@@ -71,7 +73,6 @@ class BaseCatalyst:
         assert len(metal_matches) > 0, "No transition metal found in molecule"
         assert len(metal_matches) < 2, "More than one transition metal found in molecule"
         metal_id = metal_matches[0][0]
-        metal = Metal(mol.GetAtomWithIdx(metal_id).GetSymbol())
 
         # label donor atoms
         for atom in mol.GetAtomWithIdx(metal_id).GetNeighbors():
@@ -81,8 +82,10 @@ class BaseCatalyst:
         fragments = rdMolStandardize.DisconnectOrganometallics(mol)
         ligands = []
         for ligand_mol in Chem.GetMolFrags(fragments, asMols=True):
-            if not ligand_mol.HasSubstructMatch(Chem.MolFromSmarts(TRANSITION_METALS)):
-                Chem.SanitizeMol(ligand_mol)
+            Chem.SanitizeMol(ligand_mol)
+            if ligand_mol.HasSubstructMatch(Chem.MolFromSmarts(TRANSITION_METALS)):
+                metal = Metal(ligand_mol)
+            else:
                 # find donor atom
                 for atom in ligand_mol.GetAtoms():
                     if atom.HasProp("donor_atom"):
@@ -213,7 +216,7 @@ class Ligand:
 
     def __init__(self, mol, donor_id=None, fixed=False):
         self.mol = mol
-        if not donor_id:
+        if donor_id is None:
             self.find_donor_atom(smarts_match=True)
         else:
             self.donor_id = donor_id
