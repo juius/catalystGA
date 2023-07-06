@@ -2,7 +2,6 @@ import logging
 import math
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import List, Tuple
 
@@ -39,11 +38,11 @@ def xtb_calculate(
     # Set Threads
     set_threads(n_cores)
     # Creat TMP directory
-    tempdir = tempfile.TemporaryDirectory(dir=scr, prefix="XTB_")
-    tmp_scr = Path(tempdir.name)
+    # tempdir = tempfile.TemporaryDirectory(dir=scr, prefix="XTB_")
+    # tmp_scr = Path(tempdir.name)
 
     # Use pre-existing dir instead of deleting calcs on the fly
-    # tmp_scr = Path(scr)
+    tmp_scr = Path(scr)
 
     xyz_file = write_xyz(atoms, coords, tmp_scr)
     _logger.info(f"File at: {xyz_file}")
@@ -111,7 +110,7 @@ def write_detailed_input(details_dict: dict, scr: Path):
     for key, value in details_dict.items():
         detailed_input_str += f"${key}\n"
         for subkey, subvalue in value.items():
-            detailed_input_str += f'\t{subkey}: {", ".join([str(i) for i in subvalue])}\n'
+            detailed_input_str += f'   {subkey}: {",".join([str(i) for i in subvalue])}\n'
     detailed_input_str += "$end\n"
 
     fpath = scr / "details.inp"
