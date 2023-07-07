@@ -681,7 +681,7 @@ class DativeLigand(Ligand):
                         (
                             atoms,
                             conf.GetPositions(),
-                            {"gfn": "ff", "opt": "tight"},
+                            {"gfn": "ff", "opt": "tight", "charge": 2},
                             calc_dir,
                             cpus_per_worker,
                         )
