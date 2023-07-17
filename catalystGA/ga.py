@@ -16,7 +16,6 @@ from catalystGA.utils import GADatabase, MoleculeOptions, str_table
 
 
 class GA(ABC):
-
     DB_LOCATION = f"ga_{time.strftime('%Y-%m-%d_%H-%M')}.sqlite"
 
     def __init__(
@@ -27,6 +26,7 @@ class GA(ABC):
         maximize_score=True,
         selection_pressure=1.5,
         mutation_rate=0.5,
+        scoring_kwargs={},
         donor_atoms_smarts_match=False,
         db_location=DB_LOCATION,
         config_file="./config.toml",
@@ -37,6 +37,7 @@ class GA(ABC):
         self.maximize_score = maximize_score
         self.selection_pressure = selection_pressure
         self.mutation_rate = mutation_rate
+        self.scoring_kwargs = scoring_kwargs
         self.donor_atoms_smarts_match = donor_atoms_smarts_match
         self.config_file = config_file
         self.db = GADatabase(db_location, cat_type=mol_options.individual_type)
@@ -74,7 +75,6 @@ class GA(ABC):
             self.config = tomli.load(fp)
 
     def calculate_scores(self, population: list, gen_id: int) -> list:
-
         """Calculates scores for all individuals in the population.
 
         Args:
@@ -84,9 +84,10 @@ class GA(ABC):
             population: List of individuals with scores
         """
 
-        def _wrap_scoring(individual, n_cores, envvar_scratch):
+        def _wrap_scoring(individual, n_cores, envvar_scratch, scoring_kwargs):
             print(f"Scoring individual {individual.idx}")
-            individual.calculate_score(n_cores, envvar_scratch)
+            print(f"Scoring args: {scoring_kwargs}")
+            individual.calculate_score(n_cores, envvar_scratch, **scoring_kwargs)
             print(individual.score)
             return individual
 
@@ -106,6 +107,7 @@ class GA(ABC):
             population,
             [self.config["slurm"]["cpus_per_task"]] * len(population),
             [self.config["slurm"]["envvar_scratch"]] * len(population),
+            [self.scoring_kwargs] * len(population),
         )
         # read results, if job terminated with error then return individual without score
         new_population = []
@@ -115,7 +117,7 @@ class GA(ABC):
                 cat = job.result()
             except Exception as e:
                 error = f"Exception: {e}\n"
-                error += f"{job.stderr()}"
+                error += "{job.stderr()}"
                 cat = population[i]
             finally:
                 cat.error = error
@@ -168,11 +170,11 @@ class GA(ABC):
             parent1, parent2 = np.random.choice(population, p=fitness, size=2, replace=False)
             child = self.crossover(parent1, parent2)
             if child and self.mol_options.check(child.mol):
-                child.parents = (parent1.idx, parent2.idx)
+                child.parents = str((parent1.idx, parent2.idx))
                 if random.random() <= self.mutation_rate:
                     child = self.mutate(child)
                     if child:
-                        child.mutated = True
+                        child.mutated = int(True)
                 if (
                     child
                     and self.mol_options.check(child.mol)
@@ -226,7 +228,7 @@ class GA(ABC):
             calc_dir.mkdir(exist_ok=True)
             for ligand in individual.ligands:
                 ligand.find_donor_atom(smarts_match, reference_smiles, n_cores, calc_dir)
-            return [ligand.connection_atom_id for ligand in individual.ligands]
+            return [ligand.donor_id for ligand in individual.ligands]
 
         temp_dir = self.config["slurm"]["tmp_dir"] + "_" + str(uuid.uuid4())
         executor = submitit.AutoExecutor(
@@ -247,13 +249,13 @@ class GA(ABC):
             [min([4, self.config["slurm"]["cpus_per_task"]])] * len(population),
             [self.config["slurm"]["envvar_scratch"]] * len(population),
         )
-        # read results, if job terminated with error then return the connection_atom_id from smarts matching
+        # read results, if job terminated with error then return the donor_id from smarts matching
         for i, job in enumerate(jobs):
             try:
-                connection_atom_ids = job.result()
+                donor_ids = job.result()
                 # update donor id
-                for ligand, connection_atom_id in zip(population[i].ligands, connection_atom_ids):
-                    ligand.connection_atom_id = connection_atom_id
+                for ligand, donor_id in zip(population[i].ligands, donor_ids):
+                    ligand.donor_id = donor_id
             except Exception as e:
                 print(f"Coulnd't find donor atoms for {population[i].smiles} with error {e}")
 
@@ -264,7 +266,8 @@ class GA(ABC):
 
     @staticmethod
     def sort_population(population: list, maximize_score: bool) -> list:
-        """Sorts the population by score.
+        """Sorts the population by score, if score is NaN then it is always
+        last.
 
         Args:
             population (list): List of all individuals
@@ -272,7 +275,6 @@ class GA(ABC):
         Returns:
             list: Sorted list of all individuals
         """
-        # sort population based on score, if score is NaN then it is always last
         population.sort(
             key=lambda x: (maximize_score - 0.5) * float("-inf")
             if math.isnan(x.score)
