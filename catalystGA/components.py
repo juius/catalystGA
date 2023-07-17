@@ -19,7 +19,7 @@ TRANSITION_METALS = (
     "[Sc,Ti,V,Cr,Mn,Fe,Co,Ni,Cu,Zn,Y,Zr,Nb,Mo,Tc,Ru,Rh,Pd,Ag,Cd,Lu,Hf,Ta,W,Re,Os,Ir,Pt,Au,Hg]"
 )
 
-###  Dative bond patterns  ###
+#  Dative bond patterns
 
 CARBENE = "#6&v2H0"
 PHOSPHINE = "#15&v3"
@@ -29,7 +29,7 @@ CO = "C-,v5"
 DONORS_dative = [CARBENE, PHOSPHINE, AMINE, OXYGEN, CO]
 priority_dative = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS_dative]
 
-###  Covalent bond patterns ###
+#  Covalent bond patterns
 # Halogens
 HALOGENS = "#9,#17,#35"
 # Hydroxide
@@ -136,9 +136,9 @@ class BaseCatalyst:
     def assemble(
         self, extraLigands: None = None, chiralTag: None = None, permutationOrder: None = None
     ) -> Mol:
-        """Forms bonds from Ligands to Metal Center, adds extra Ligands from
+        """Forms bonds from ligands to metal center, adds extra ligands from
         Reaction SMARTS and sets the chiral tag of the metal center and
-        permutation order of the Ligands.
+        permutation order of the ligands.
 
         Args:
             extraLigands (str, optional): Reaction SMARTS to add ligands to the molecule. Defaults to None.
@@ -177,11 +177,9 @@ class BaseCatalyst:
                 for id in connection_atom_ids:
                     emol.AddBond(id, 0, ligand.bond_type)
             else:
-
                 connection_atom_id = ligand.connection_atom_id
                 # If we have CovalentLigand, check if the connection is a halogen.
                 if isinstance(ligand, CovalentLigand):
-
                     # Get neighbors to connection atom
                     neighbours = ligand.mol.GetAtomWithIdx(
                         ligand.connection_atom_id
@@ -288,7 +286,6 @@ class Ligand(ABC):
         self,
         mol: Mol,
         connection_atom_id: None = None,
-        fixed: bool = False,
         smarts_match: bool = True,
     ) -> None:
         self.mol = mol
@@ -296,7 +293,6 @@ class Ligand(ABC):
             self.find_donor_atom(smarts_match=smarts_match)
         else:
             self.connection_atom_id = connection_atom_id
-        self.fixed = fixed
 
     def __repr__(self):
         return f"{MolHash(Chem.RemoveHs(self.mol), HashFunction.CanonicalSmiles)}"
@@ -327,10 +323,6 @@ class Ligand(ABC):
     ):
         pass
 
-    def set_positions(self, positions):
-        if self.fixed:
-            self.positions = positions
-
 
 class CovalentLigand(Ligand):
     """Covalently bound ligands."""
@@ -339,7 +331,6 @@ class CovalentLigand(Ligand):
         self,
         mol: Mol,
         connection_atom_id: int = None,
-        fixed: bool = False,
         smarts_match: bool = True,
     ) -> None:
         super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
@@ -465,7 +456,6 @@ class CovalentLigand(Ligand):
 
                     # Find lowest energy conformer
                     atoms = [atom.GetSymbol() for atom in mol.GetAtoms()]
-                    results = []
 
                     workers = np.min([n_cores, numConfs])
                     cpus_per_worker = n_cores // workers
@@ -496,7 +486,7 @@ class CovalentLigand(Ligand):
                         opt_adj = Chem.GetAdjacencyMatrix(ac2mol(atoms, opt_coords))
                         if not np.array_equal(adj, opt_adj):
                             _logger.warning(
-                                f"\tChange in adjacency matrix after GFN-FF optimization. Skipping conformer"
+                                "\tChange in adjacency matrix after GFN-FF optimization. Skipping conformer"
                             )
                             continue
                         else:
@@ -556,7 +546,6 @@ class DativeLigand(Ligand):
         self,
         mol: Mol,
         connection_atom_id: None = None,
-        fixed: bool = False,
         smarts_match: bool = True,
     ) -> None:
         super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
@@ -592,7 +581,7 @@ class DativeLigand(Ligand):
                 )
             elif len(matches) == 1:
                 # Make all possible constitutional isomers
-                _logger.info(f"Found 1 possible donor atoms in DativeLigand.")
+                _logger.info("Found 1 possible donor atoms in DativeLigand.")
                 connection_atom_id = matches[0][0]
             else:
                 # Make all possible constitutional isomers
@@ -638,7 +627,6 @@ class DativeLigand(Ligand):
 
                     # Find lowest energy conformer
                     atoms = [atom.GetSymbol() for atom in mol.GetAtoms()]
-                    results = []
 
                     workers = np.min([n_cores, numConfs])
                     cpus_per_worker = n_cores // workers
@@ -665,7 +653,7 @@ class DativeLigand(Ligand):
                         opt_adj = Chem.GetAdjacencyMatrix(ac2mol(atoms, opt_coords))
                         if not np.array_equal(adj, opt_adj):
                             _logger.warning(
-                                f"\tChange in adjacency matrix after GFN-FF optimization. Skipping conformer"
+                                "\tChange in adjacency matrix after GFN-FF optimization. Skipping conformer"
                             )
                             continue
                         else:
@@ -725,7 +713,7 @@ class DativeLigand(Ligand):
 class BidentateLigand(Ligand):
     """Bidentate ligands."""
 
-    def __init__(self, mol, connection_atom_id=None, fixed=False, smarts_match=False):
+    def __init__(self, mol, connection_atom_id=None, smarts_match=False):
         super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
         self.bond_type = Chem.BondType.DATIVE
 

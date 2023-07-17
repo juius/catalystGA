@@ -1,16 +1,15 @@
 repos:
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.4.0
+    rev: v4.4.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
         args: ["--unsafe"]
-      - id: check-added-large-files
 
   - repo: https://github.com/myint/autoflake
-    rev: v1.4
+    rev: v2.2.0
     hooks:
       - id: autoflake
         name: Removes unused variables
@@ -21,7 +20,7 @@ repos:
           - --ignore-init-module-imports
 
   - repo: https://github.com/pre-commit/mirrors-isort
-    rev: v5.7.0
+    rev: v5.10.1
     hooks:
       - id: isort
         name: Sorts imports
@@ -36,13 +35,29 @@ repos:
         ]
 
   - repo: https://github.com/psf/black
-    rev: 22.6.0
+    rev: 23.7.0
     hooks:
       - id: black
         name: Fixes formatting
         language_version: python3
         args: ["--line-length=99"]
 
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        name: Checks pep8 style
+        exclude: ^catalystGA/reproduction_utils.py
+        args: [
+          "--max-line-length=99",
+          # Ignore imports in init files
+          "--per-file-ignores=*/__init__.py:F401,setup.py:E121",
+          # ignore long comments (E501), as long lines are formatted by black
+          # ignore Whitespace before ':' (E203)
+          # ignore Line break occurred before a binary operator (W503)
+          "--ignore=E501,E203,W503",
+        ]
 
   - repo: local
     hooks:
@@ -75,7 +90,7 @@ repos:
         language: python
 
   - repo: https://github.com/myint/docformatter
-    rev: v1.3.1
+    rev: v1.7.5
     hooks:
       - id: docformatter
         args: [--in-place]
