@@ -64,7 +64,9 @@ class GADatabase(object):
             smiles TEXT,
             score REAL,
             timing REAL,
-            status TEXT
+            status TEXT,
+            parents TEXT,
+            mutated INTEGER
             """
         for key, value in self.cat_type.save_attributes.items():
             table += f",\n{key} {value}"
@@ -104,7 +106,7 @@ class GADatabase(object):
     def add_individuals(self, genid, population):
         """add individuals to the database (idx, smiles, score, timing, status
         and 'save_attributes')"""
-        columns = ["idx", "smiles", "score", "timing", "status"]
+        columns = ["idx", "smiles", "score", "timing", "status", "parents", "mutated"]
         columns += list(self.cat_type.save_attributes.keys())
         with self.connection:
             self.cur.executemany(
@@ -119,6 +121,8 @@ class GADatabase(object):
                         ind.score,
                         ind.timing,
                         ind.error,
+                        ind.parents,
+                        ind.mutated,
                     )
                     + tuple(
                         [

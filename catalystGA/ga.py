@@ -30,6 +30,7 @@ class GA(ABC):
         donor_atoms_smarts_match=False,
         db_location=DB_LOCATION,
         config_file="./config.toml",
+        scoring_args={},
     ):
         self.mol_options = mol_options
         self.population_size = population_size
@@ -39,6 +40,7 @@ class GA(ABC):
         self.mutation_rate = mutation_rate
         self.donor_atoms_smarts_match = donor_atoms_smarts_match
         self.config_file = config_file
+        self.scoring_args = scoring_args
         self.db = GADatabase(db_location, cat_type=mol_options.individual_type)
         self.db.create_tables()
         self.health_check()
@@ -82,9 +84,10 @@ class GA(ABC):
             population: List of individuals with scores
         """
 
-        def _wrap_scoring(individual, n_cores, envvar_scratch):
+        def _wrap_scoring(individual, n_cores, envvar_scratch, scoring_args):
             print(f"Scoring individual {individual.idx}")
-            individual.calculate_score(n_cores, envvar_scratch)
+            print(f"Scoring args: {scoring_args}")
+            individual.calculate_score(n_cores, envvar_scratch, **scoring_args)
             print(individual.score)
             return individual
 
@@ -104,6 +107,7 @@ class GA(ABC):
             population,
             [self.config["slurm"]["cpus_per_task"]] * len(population),
             [self.config["slurm"]["envvar_scratch"]] * len(population),
+            [self.scoring_args] * len(population),
         )
         # read results, if job terminated with error then return individual without score
         new_population = []
@@ -166,11 +170,11 @@ class GA(ABC):
             parent1, parent2 = np.random.choice(population, p=fitness, size=2, replace=False)
             child = self.crossover(parent1, parent2)
             if child and self.mol_options.check(child.mol):
-                child.parents = (parent1.idx, parent2.idx)
+                child.parents = str((parent1.idx, parent2.idx))
                 if random.random() <= self.mutation_rate:
                     child = self.mutate(child)
                     if child:
-                        child.mutated = True
+                        child.mutated = int(True)
                 if (
                     child
                     and self.mol_options.check(child.mol)
@@ -262,7 +266,8 @@ class GA(ABC):
 
     @staticmethod
     def sort_population(population: list, maximize_score: bool) -> list:
-        """Sorts the population by score.
+        """Sorts the population by score, if score is NaN then it is always
+        last.
 
         Args:
             population (list): List of all individuals
@@ -270,7 +275,6 @@ class GA(ABC):
         Returns:
             list: Sorted list of all individuals
         """
-        # sort population based on score, if score is NaN then it is always last
         population.sort(
             key=lambda x: (maximize_score - 0.5) * float("-inf")
             if math.isnan(x.score)
@@ -363,7 +367,7 @@ class GA(ABC):
         time_per_gen = []
         tmp_time = time.time()
         self.population = self.make_initial_population()
-        self.find_all_donor_atoms(self.population)
+        # self.find_all_donor_atoms(self.population)
         self.population = self.calculate_scores(self.population, gen_id=0)
         self.db.add_individuals(0, self.population)
         self.print_population(self.population, 0)
@@ -385,3 +389,20 @@ class GA(ABC):
         self.print_timing(start_time, time.time(), time_per_gen, self.population)
 
         return results
+
+    @classmethod
+    def load(cls, db_location, mol_options):
+        return cls(
+            mol_options=mol_options,
+            population_size=25,
+            n_generations=50,
+            maximize_score=True,
+            selection_pressure=1.5,
+            mutation_rate=0.5,
+            donor_atoms_smarts_match=False,
+            db_location=db_location,
+            config_file="./config.toml",
+        )
+
+    def rerun(self, n_extra_generations=25):
+        self.population
