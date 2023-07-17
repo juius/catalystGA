@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import List
 
 import numpy as np
+from hide_warnings import hide_warnings
 from rdkit import Chem
 from rdkit.Chem import rdChemReactions, rdDistGeom
+from rdkit.Chem.MolStandardize import rdMolStandardize
 from rdkit.Chem.rdchem import Mol
 from rdkit.Chem.rdMolHash import HashFunction, MolHash
 
@@ -72,13 +74,9 @@ class BaseCatalyst:
                 return True
         return False
 
-    # https://stackoverflow.com/questions/10254594/what-makes-a-user-defined-class-unhashable
-
-    @classmethod
+    @hide_warnings  # Suppress MetalDisconnector output
     def from_smiles(cls, smiles: str):
-        """Generate Catalyst from SMILES string. Requires a custom version of
-        RDKit to work with dative bonds from atoms with unpaired electrons. See
-        Github issue #6287 and pull request #6288.
+        """Generate Catalyst from SMILES string.
 
         Args:
             smiles (str): SMILES string of Catalyst
@@ -95,30 +93,27 @@ class BaseCatalyst:
         assert len(metal_matches) > 0, "No transition metal found in molecule"
         assert len(metal_matches) < 2, "More than one transition metal found in molecule"
         metal_id = metal_matches[0][0]
-        metal = Metal(mol.GetAtomWithIdx(metal_id).GetSymbol())
 
         # label donor atoms
         for atom in mol.GetAtomWithIdx(metal_id).GetNeighbors():
             atom.SetBoolProp("donor_atom", True)
 
-        # fragment ligands
-        fragments = Chem.FragmentOnBonds(
-            mol,
-            [bond.GetIdx() for bond in mol.GetAtomWithIdx(metal_id).GetBonds()],
-            addDummies=False,
-        )
+        # fragment complex
+        fragments = rdMolStandardize.DisconnectOrganometallics(mol)
         ligands = []
         for ligand_mol in Chem.GetMolFrags(fragments, asMols=True):
-            if not ligand_mol.HasSubstructMatch(Chem.MolFromSmarts(TRANSITION_METALS)):
-                Chem.SanitizeMol(ligand_mol)
+            Chem.SanitizeMol(ligand_mol)
+            if ligand_mol.HasSubstructMatch(Chem.MolFromSmarts(TRANSITION_METALS)):
+                metal = Metal(ligand_mol)
+            else:
                 # find donor atom
                 for atom in ligand_mol.GetAtoms():
                     if atom.HasProp("donor_atom"):
-                        connection_atom_id = atom.GetIdx()
+                        donor_id = atom.GetIdx()
                         break
                 ligand_mol = Chem.AddHs(ligand_mol)
                 Chem.SanitizeMol(ligand_mol)
-                ligands.append(Ligand(ligand_mol, connection_atom_id=connection_atom_id))
+                ligands.append(Ligand(ligand_mol, donor_id=donor_id))
 
         cat = cls(metal, ligands)
         assert (
