@@ -127,7 +127,6 @@ class BaseCatalyst:
 
     @property
     def smiles(self) -> str:
-        self.assemble()
         return MolHash(Chem.RemoveHs(self.mol), HashFunction.CanonicalSmiles)
 
     # TODO
