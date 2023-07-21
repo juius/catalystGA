@@ -117,7 +117,7 @@ class GA(ABC):
                 cat = job.result()
             except Exception as e:
                 error = f"Exception: {e}\n"
-                error += "{job.stderr()}"
+                error += f"{job.stderr()}"
                 cat = population[i]
             finally:
                 cat.error = error
