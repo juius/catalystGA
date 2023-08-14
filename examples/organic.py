@@ -2,7 +2,9 @@ import math
 
 from rdkit import Chem
 from rdkit.Chem import Descriptors
-
+from rdkit.Chem import Draw
+import sys
+sys.path.append("/Users/dbo/Documents/CarbonCapture/GA_playground/CarbonCaptureCatalystGA/")
 from catalystGA import GA
 from catalystGA.reproduction_utils import graph_crossover, graph_mutate
 from catalystGA.utils import MoleculeOptions
@@ -98,11 +100,25 @@ class GraphGA(GA):
     def run(self):
         results = []  # here the best individuals of each generation will be stored
         self.print_parameters()
+        
         self.population = self.make_initial_population()
+        
         self.population = self.calculate_scores(self.population, gen_id=0)
+        
         self.db.add_individuals(0, self.population)
+        
         self.print_population(self.population, 0)
+        inda, indb = 2,5
+        a = self.population[inda].mol#Chem.MolToSmiles(self.population[0].mol)
+        b = self.population[indb].mol#Chem.MolToSmiles(self.population[1].mol)
+        ab = self.crossover(self.population[inda], self.population[indb]).mol#Chem.MolToSmiles(self.crossover(self.population[0], self.population[1]).mol)
+        #print(a)
+        Draw.MolToFile(a, "a.png")
+        Draw.MolToFile(b, "b.png")
+        Draw.MolToFile(ab, "ab.png")
+        """
         for n in range(0, self.n_generations):
+            print("N-generation: ", n, "\n")
             self.calculate_fitness(self.population)
             self.db.add_generation(n, self.population)
             self.append_results(results, gennum=n, detailed=True)
@@ -114,6 +130,7 @@ class GraphGA(GA):
         self.calculate_fitness(self.population)
         self.db.add_generation(n + 1, self.population)
         self.append_results(results, gennum=n + 1, detailed=True)
+        """
         return results
 
 

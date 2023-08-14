@@ -395,16 +395,22 @@ def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
     """
     mol = Chem.RemoveHs(mol)
     Chem.Kekulize(mol, clearAromaticFlags=True)
+
+
+    ###Construct the mutation options list once.
     p = [0.15, 0.14, 0.14, 0.14, 0.14, 0.14, 0.15]
+    rxn_smarts_list = 7 * [""]
+    rxn_smarts_list[0] = insert_atom()
+    rxn_smarts_list[1] = change_bond_order()
+    rxn_smarts_list[2] = delete_cyclic_bond()
+    rxn_smarts_list[3] = add_ring()
+    rxn_smarts_list[4] = delete_atom()
+    rxn_smarts_list[5] = change_atom(mol)
+    rxn_smarts_list[6] = append_atom()
+
+
     for i in range(10):
-        rxn_smarts_list = 7 * [""]
-        rxn_smarts_list[0] = insert_atom()
-        rxn_smarts_list[1] = change_bond_order()
-        rxn_smarts_list[2] = delete_cyclic_bond()
-        rxn_smarts_list[3] = add_ring()
-        rxn_smarts_list[4] = delete_atom()
-        rxn_smarts_list[5] = change_atom(mol)
-        rxn_smarts_list[6] = append_atom()
+        
         rxn_smarts = np.random.choice(rxn_smarts_list, p=p)
 
         rxn = AllChem.ReactionFromSmarts(rxn_smarts)
