@@ -29,7 +29,7 @@ class GA(ABC):
         mutation_rate=0.5,
         donor_atoms_smarts_match=False,
         db_location=DB_LOCATION,
-        config_file="./config.toml",
+        config_file=f"{os.path.dirname(__file__)}/config.toml",
         scoring_args={},
     ):
         self.mol_options = mol_options

@@ -1,9 +1,0 @@
-[slurm]
-
-queue = "kemi1"
-cpus_per_task = 4
-array_parallelism = 100
-timeout_min = 120
-tmp_dir = '_scoring'
-
-[logging]
