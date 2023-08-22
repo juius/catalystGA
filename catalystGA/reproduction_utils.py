@@ -144,6 +144,14 @@ def mol_OK(mol: Chem.Mol) -> bool:
         return False
 
 
+def charge_OK(mol: Chem.Mol, max_charges: int = 1) -> bool:
+    charges = countCharges(mol)
+    if len(charges) > max_charges:
+        return False
+    else:
+        return True
+
+
 def crossover_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
     """Performs crossover of two molecules with ring system.
 
@@ -191,7 +199,7 @@ def crossover_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
         new_mols2 = []
         for m in new_mols:
             m = m[0]
-            if mol_OK(m) and ring_OK(m):
+            if mol_OK(m) and ring_OK(m) and charge_OK(m):
                 new_mols2.append(m)
 
         if len(new_mols2) > 0:
@@ -224,7 +232,7 @@ def crossover_non_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or No
         new_mols = []
         for mol in new_mol_trial:
             mol = mol[0]
-            if mol_OK(mol):
+            if mol_OK(mol) and charge_OK(mol):
                 new_mols.append(mol)
 
         if len(new_mols) > 0:
@@ -233,7 +241,7 @@ def crossover_non_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or No
     return None
 
 
-@hide_warnings
+@hide_warnings(out=False)
 def graph_crossover(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
     """Performs crossover between two molecules, either via ring system or non-
     ring system.
@@ -383,7 +391,7 @@ def change_atom(mol: Chem.Mol) -> str:
     return "[X:1]>>[Y:1]".replace("X", X).replace("Y", Y)
 
 
-@hide_warnings
+@hide_warnings(out=False)
 def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
     """Performs mutation on molecule (add, remove or replace bond or atom)
 
@@ -395,9 +403,9 @@ def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
     """
     mol = Chem.RemoveHs(mol)
     Chem.Kekulize(mol, clearAromaticFlags=True)
-    p = [0.15, 0.14, 0.14, 0.14, 0.14, 0.14, 0.15]
+    p = [0.125] * 8
     for i in range(10):
-        rxn_smarts_list = 7 * [""]
+        rxn_smarts_list = 8 * [""]
         rxn_smarts_list[0] = insert_atom()
         rxn_smarts_list[1] = change_bond_order()
         rxn_smarts_list[2] = delete_cyclic_bond()
@@ -405,7 +413,11 @@ def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
         rxn_smarts_list[4] = delete_atom()
         rxn_smarts_list[5] = change_atom(mol)
         rxn_smarts_list[6] = append_atom()
+        rxn_smarts_list[7] = change_charge(mol)
         rxn_smarts = np.random.choice(rxn_smarts_list, p=p)
+
+        if not rxn_smarts:
+            continue
 
         rxn = AllChem.ReactionFromSmarts(rxn_smarts)
 
@@ -426,6 +438,14 @@ def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
     return None
 
 
+def countCharges(mol):
+    charges = []
+    for atom in mol.GetAtoms():
+        if atom.GetFormalCharge() != 0:
+            charges.append(atom.GetFormalCharge())
+    return charges
+
+
 def _remove_radicals(mol):
     FREE_RADICAL = "[#6&v3+0,#7&v2+0]"
     for match in mol.GetSubstructMatches(Chem.MolFromSmarts(FREE_RADICAL)):
@@ -433,3 +453,72 @@ def _remove_radicals(mol):
         atom.SetNumRadicalElectrons(0)
         atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
     Chem.SanitizeMol(mol)
+
+
+def change_charge(mol):
+
+    DEPROTONATIONS = {
+        "NH1": "[NH1:1]>>[N-;H0:1]",
+        "NH2": "[NH2:1]>>[N-;H1:1]",
+        "OH1": "[O;H1:1]>>[O-;H0:1]",
+    }
+
+    PROTONATIONS = {
+        "NH1": "[N;H1:1]>>[N+;H2:1]",
+        "NH2": "[N;H2:1]>>[N+;H3:1]",
+    }
+
+    def _get_protonation_rxn_smarts(mol):
+        ANION = "[*-1]"
+        anions = mol.GetSubstructMatches(Chem.MolFromSmarts(ANION))
+        if len(anions) == 0:
+            return None
+        # assert len(anions) == 1, f'Only works for simple anions, not {Chem.MolToSmiles(mol)}'
+        n_hydrogen = mol.GetAtomWithIdx(anions[0][0]).GetTotalNumHs(includeNeighbors=True)
+        return f"[*-1;H{n_hydrogen}:0]>>[*+0;H{n_hydrogen+1}:0]"
+
+    def _get_deprotonation_rxn_smarts(mol):
+        CATION = "[*+1]"
+        cations = mol.GetSubstructMatches(Chem.MolFromSmarts(CATION))
+        if len(cations) == 0:
+            return None
+        # assert len(cations) == 1, f'Only works for simple cations, not {Chem.MolToSmiles(mol)}'
+        n_hydrogen = mol.GetAtomWithIdx(cations[0][0]).GetTotalNumHs(includeNeighbors=True)
+        return f"[*+1;H{n_hydrogen}:0]>>[*+0;H{n_hydrogen-1}:0]"
+
+    def _get_matching_rxn_smarts(mol):
+        # randomize if protonation or deprotonation comes first
+        dicts = [DEPROTONATIONS, PROTONATIONS]
+        random.shuffle(dicts)
+        for d in dicts:
+            # randomize order of keys
+            keys = list(d.keys())
+            random.shuffle(keys)
+            for match in keys:
+                # check if mol has relevant pattern for reaction
+                if mol.HasSubstructMatch(Chem.MolFromSmarts("[" + match + "]")):
+                    # return relevant reaction smarts
+                    return d[match]
+        return None
+
+    charges = []
+    for atom in Chem.AddHs(mol).GetAtoms():
+        if atom.GetFormalCharge() != 0:
+            charges.append(atom.GetFormalCharge())
+
+    assert (
+        len(charges) <= 1
+    ), f"Only works for simple anions or cations, not {Chem.MolToSmiles(mol)}"
+
+    # neutralize mol
+    if sum(charges) > 0:
+        rxn_smarts = _get_deprotonation_rxn_smarts(mol)
+    elif sum(charges) < 0:
+        rxn_smarts = _get_protonation_rxn_smarts(mol)
+    elif len(charges) == 0:
+        # make anion or cation
+        rxn_smarts = _get_matching_rxn_smarts(mol)
+    else:
+        rxn_smarts = None
+
+    return rxn_smarts
