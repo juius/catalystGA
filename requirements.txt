@@ -5,4 +5,4 @@ networkx
 tabulate
 py3Dmol
 submitit
-hide_warnings
+hide-warnings
