@@ -391,7 +391,7 @@ class GA(ABC):
         return results
 
     @classmethod
-    def load(cls, db_location, mol_options):
+    def load(cls, db_location, mol_options, scoring_args={}):
         return cls(
             mol_options=mol_options,
             population_size=25,
@@ -402,6 +402,7 @@ class GA(ABC):
             donor_atoms_smarts_match=False,
             db_location=db_location,
             config_file="./config.toml",
+            scoring_args=scoring_args,
         )
 
     def rerun(self, n_extra_generations=25):
