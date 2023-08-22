@@ -291,7 +291,7 @@ class Ligand:
                     metal.SetIntProp("_chiralPermutation", 2)
                     Chem.SanitizeMol(mol)
                     _logger.info(f"\nIsomer: {Chem.MolToSmiles(Chem.RemoveHs(mol))}")
-
+                    mol = Chem.AddHs(mol)
                     # Embed test molecule
                     _ = rdDistGeom.EmbedMultipleConfs(
                         mol,
