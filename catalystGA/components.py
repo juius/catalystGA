@@ -36,7 +36,6 @@ tmQMg_patterns = [SULPHUR, ARSENIC, SELENIUM, SILICON]
 DONORS_dative = [CARBENE, PHOSPHINE, AMINE, OXYGEN, CO] + tmQMg_patterns
 priority_dative = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS_dative]
 
-#  Covalent bond patterns ###
 
 HALOGENS = "#9,#17,#35"
 HYDROXIDE = "O;H1"
@@ -59,7 +58,6 @@ class BaseCatalyst:
     def __init__(self, metal: Chem.Mol, ligands: List) -> None:
         self.metal = metal
         self.ligands = ligands
-        self.n_ligands = len(ligands)
         self.score = math.nan
         self.fitness = math.nan
         self.error = ""
@@ -466,7 +464,7 @@ class CovalentLigand(Ligand):
                         mol,
                         numConfs=numConfs,
                         useRandomCoords=True,
-                        pruneRmsThresh=0.1,
+                        pruneRmsThresh=0.5,
                         randomSeed=42,
                     )
 
@@ -657,7 +655,7 @@ class DativeLigand(Ligand):
                         mol,
                         numConfs=numConfs,
                         useRandomCoords=True,
-                        pruneRmsThresh=0.1,
+                        pruneRmsThresh=0.5,
                         randomSeed=42,
                     )
 
