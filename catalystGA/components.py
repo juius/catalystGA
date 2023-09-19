@@ -28,19 +28,16 @@ DONORS_dative = [CARBENE, PHOSPHINE, AMINE, OXYGEN, CO]
 priority_dative = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS_dative]
 
 ###  Covalent bond patterns ###
-# Halogens
+
 HALOGENS = "#9,#17,#35"
-# Hydroxide
 HYDROXIDE = "O;H1"
-# Amines
 SECONDARY_AMINE = "#7X3;H1"
 PRIMARY_AMINE = "#7X3;H2"
-# SP3 hybridized carbon
 SP3_CARBON = "#6X4;!H0"
-# SP2 hybridized carbon
 SP2_CARBON = "#6X3;!H0"
 
-DONORS_covalent = [HYDROXIDE, SECONDARY_AMINE, PRIMARY_AMINE, SP3_CARBON, SP2_CARBON, HALOGENS]
+DONORS_covalent = [HYDROXIDE, SECONDARY_AMINE, PRIMARY_AMINE, SP3_CARBON, SP2_CARBON]
+priority_covalent = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS_covalent]
 
 
 class BaseCatalyst:
@@ -51,7 +48,6 @@ class BaseCatalyst:
     def __init__(self, metal: Chem.Mol, ligands: List) -> None:
         self.metal = metal
         self.ligands = ligands
-        self.n_ligands = len(ligands)
         self.score = math.nan
         self.energy = math.nan
         self.fitness = math.nan
@@ -462,7 +458,7 @@ class CovalentLigand(Ligand):
                         mol,
                         numConfs=numConfs,
                         useRandomCoords=True,
-                        pruneRmsThresh=0.1,
+                        pruneRmsThresh=0.5,
                         randomSeed=42,
                     )
 
@@ -534,7 +530,7 @@ class CovalentLigand(Ligand):
                 _logger.info("Binding energies:")
                 _logger.info(
                     ("{:>12}{:>12}{:>27}").format(
-                        "Donor ID", "Atom Type", "Binding Energy [Hartree] - (GFN2-SP)"
+                        "Donor ID", "Atom Type", " Binding Energy [Hartree] - (GFN2-SP)"
                     )
                 )
                 for connection_atom_id, energy in binding_energies:
@@ -635,7 +631,7 @@ class DativeLigand(Ligand):
                         mol,
                         numConfs=numConfs,
                         useRandomCoords=True,
-                        pruneRmsThresh=0.1,
+                        pruneRmsThresh=0.5,
                         randomSeed=42,
                     )
 
@@ -704,7 +700,7 @@ class DativeLigand(Ligand):
                 _logger.info("Binding energies:")
                 _logger.info(
                     ("{:>12}{:>12}{:>27}").format(
-                        "Donor ID", "Atom Type", "Binding Energy [Hartree] - GFN2-SP"
+                        "Donor ID", "Atom Type", " Binding Energy [Hartree] - GFN2-SP"
                     )
                 )
                 for connection_atom_id, energy in binding_energies:
