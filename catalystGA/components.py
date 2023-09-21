@@ -680,7 +680,7 @@ class DativeLigand(Ligand):
                             atoms,
                             conf.GetPositions(),
                             {"gfn": "ff", "opt": "tight", "charge": 2},
-                            calc_dirs,
+                            calc_dir,
                             cpus_per_worker,
                         )
                         for conf, calc_dir in zip(mol.GetConformers(), calc_dirs)
