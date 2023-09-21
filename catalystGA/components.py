@@ -644,6 +644,11 @@ class DativeLigand(Ligand):
 
                     workers = np.min([n_cores, numConfs])
                     cpus_per_worker = n_cores // workers
+
+                    # Create separate folders for all conformers
+                    calc_dirs = [calc_dir / f"{i}" for i in range(len(mol.GetConformers()))]
+                    [x.mkdir(exist_ok=True) for x in calc_dirs]
+
                     # Construct args
                     args = [
                         (
@@ -653,7 +658,7 @@ class DativeLigand(Ligand):
                             calc_dir,
                             cpus_per_worker,
                         )
-                        for conf in mol.GetConformers()
+                        for conf, calc_dir in zip(mol.GetConformers(), calc_dirs)
                     ]
 
                     # Submit to paralell
@@ -677,7 +682,7 @@ class DativeLigand(Ligand):
                     # Construct args
                     args = [
                         (atoms, coords, {"gfn": 2, "charge": 2}, calc_dir, cpus_per_worker)
-                        for coords in opt_coords_list
+                        for coords, calc_dir in zip(opt_coords_list, calc_dirs)
                     ]
 
                     # Submit to paralell
