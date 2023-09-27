@@ -351,6 +351,7 @@ class CovalentLigand(Ligand):
         self,
         smarts_match: bool = True,
         reference_smiles: str = "[Mo]<-N#N",
+        xtb_args=None,
         n_cores: int = 1,
         calc_dir=Path("."),
         numConfs: int = 20,
@@ -374,6 +375,9 @@ class CovalentLigand(Ligand):
                     f"No donor atom found for CovalentLigand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
+            # Ensure that the connection atom id is none if something fails.
+            connection_atom_id = None
+
             # Find all possible donor atoms # TODO SOMETHING WITH THE SMARTS PATTERN MAKES THE MATCH FAIL IF DONE LIKE THE DATIVE LIGAND
             matches = ()
             type_match = []
@@ -507,7 +511,13 @@ class CovalentLigand(Ligand):
 
                     # Construct args
                     args = [
-                        (atoms, coords, {"gfn": 2}, calc_dir, cpus_per_worker)
+                        (
+                            atoms,
+                            coords,
+                            {"gfn": 2, "charge": xtb_args["charge"], "uhf": xtb_args["uhf"]},
+                            calc_dir,
+                            cpus_per_worker,
+                        )
                         for coords, calc_dir in zip(opt_coords_list, calc_dirs)
                     ]
 
@@ -544,10 +554,6 @@ class CovalentLigand(Ligand):
 
                 connection_atom_id = binding_energies[0][0]
 
-                _logger.info(
-                    f"Donor atom: {connection_atom_id} ({self.mol.GetAtomWithIdx(connection_atom_id).GetSymbol()})"
-                )
-
         self.connection_atom_id = connection_atom_id
 
 
@@ -568,6 +574,7 @@ class DativeLigand(Ligand):
         self,
         smarts_match: bool = True,
         reference_smiles: str = "[Pd]<-P",
+        xtb_args=None,
         n_cores: int = 1,
         calc_dir: str = ".",
         numConfs: int = 20,
@@ -584,6 +591,9 @@ class DativeLigand(Ligand):
                     f"No donor atom found for DativeLigand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
                 )
         else:
+            # Ensure that the connection atom id is none if something fails.
+            connection_atom_id = None
+
             # Find all possible donor atoms
             pattern = Chem.MolFromSmarts("[" + ",".join(DONORS_dative) + "]")
             matches = self.mol.GetSubstructMatches(pattern)
@@ -654,7 +664,7 @@ class DativeLigand(Ligand):
                         (
                             atoms,
                             conf.GetPositions(),
-                            {"gfn": "ff", "opt": "tight", "charge": 2},
+                            {"gfn": "ff", "opt": "tight"},
                             calc_dir,
                             cpus_per_worker,
                         )
@@ -681,7 +691,13 @@ class DativeLigand(Ligand):
 
                     # Construct args
                     args = [
-                        (atoms, coords, {"gfn": 2, "charge": 2}, calc_dir, cpus_per_worker)
+                        (
+                            atoms,
+                            coords,
+                            {"gfn": 2, "charge": xtb_args["charge"], "uhf": xtb_args["uhf"]},
+                            calc_dir,
+                            cpus_per_worker,
+                        )
                         for coords, calc_dir in zip(opt_coords_list, calc_dirs)
                     ]
 
@@ -719,9 +735,6 @@ class DativeLigand(Ligand):
 
                 connection_atom_id = binding_energies[0][0]
 
-                _logger.info(
-                    f"Donor atom: {connection_atom_id} ({self.mol.GetAtomWithIdx(connection_atom_id).GetSymbol()})"
-                )
         self.connection_atom_id = connection_atom_id
 
     def set_positions(self, positions):
