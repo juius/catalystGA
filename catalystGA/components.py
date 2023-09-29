@@ -679,7 +679,7 @@ class DativeLigand(Ligand):
                         (
                             atoms,
                             conf.GetPositions(),
-                            {"gfn": "ff", "opt": "tight", "charge": 2},
+                            {"gfn": "ff", "opt": "tight"},
                             calc_dir,
                             cpus_per_worker,
                         )
@@ -710,6 +710,7 @@ class DativeLigand(Ligand):
                         (
                             atoms,
                             coords,
+<<<<<<< HEAD
                             {
                                 "gfn": 2,
                                 "charge": xtb_args["charge"],
