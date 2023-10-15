@@ -1,4 +1,3 @@
-import concurrent.futures
 import logging
 import math
 from abc import ABC, abstractmethod
@@ -11,7 +10,8 @@ from rdkit.Chem import rdChemReactions, rdDistGeom
 from rdkit.Chem.rdchem import Mol
 from rdkit.Chem.rdMolHash import HashFunction, MolHash
 
-from catalystGA.xtb import ac2mol, xtb_calculate
+from catalystGA.utils import optimize
+from catalystGA.xtb import ac2mol
 
 TRANSITION_METALS = (
     "[Sc,Ti,V,Cr,Mn,Fe,Co,Ni,Cu,Zn,Y,Zr,Nb,Mo,Tc,Ru,Rh,Pd,Ag,Cd,Lu,Hf,Ta,W,Re,Os,Ir,Pt,Au,Hg]"
@@ -136,7 +136,10 @@ class BaseCatalyst:
         pass
 
     def assemble(
-        self, extraLigands: None = None, chiralTag: None = None, permutationOrder: None = None
+        self,
+        extraLigands: None = None,
+        chiralTag: None = None,
+        permutationOrder: None = None,
     ) -> Mol:
         """Forms bonds from Ligands to Metal Center, adds extra Ligands from
         Reaction SMARTS and sets the chiral tag of the metal center and
@@ -171,7 +174,6 @@ class BaseCatalyst:
         emol.BeginBatchEdit()
 
         atom_ids = Chem.GetMolFrags(tmp)
-        self.donor_idxs = []
         for i, ligand in enumerate(self.ligands):
             # Add bonds. If the ligand is bidentate, two bonds are added
             if isinstance(ligand, BidentateLigand):
@@ -179,11 +181,9 @@ class BaseCatalyst:
                 for id in connection_atom_ids:
                     emol.AddBond(id, 0, ligand.bond_type)
             else:
-
                 connection_atom_id = ligand.connection_atom_id
                 # If we have CovalentLigand, check if the connection is a halogen.
                 if isinstance(ligand, CovalentLigand):
-
                     # Get neighbors to connection atom
                     neighbours = ligand.mol.GetAtomWithIdx(
                         ligand.connection_atom_id
@@ -205,7 +205,6 @@ class BaseCatalyst:
 
             # Remove any explicit hydrogens on the atom. Otherwise this hydrogen gives sanitation error.
             emol.GetAtomWithIdx(connection_atom_id).SetNumExplicitHs(0)
-            self.donor_idxs.append(connection_atom_id)
 
         # Commit changes made and get mol
         emol.CommitBatchEdit()
@@ -514,7 +513,11 @@ class CovalentLigand(Ligand):
                         (
                             atoms,
                             coords,
-                            {"gfn": 2, "charge": xtb_args["charge"], "uhf": xtb_args["uhf"]},
+                            {
+                                "gfn": 2,
+                                "charge": xtb_args["charge"],
+                                "uhf": xtb_args["uhf"],
+                            },
                             calc_dir,
                             cpus_per_worker,
                         )
@@ -694,7 +697,11 @@ class DativeLigand(Ligand):
                         (
                             atoms,
                             coords,
-                            {"gfn": 2, "charge": xtb_args["charge"], "uhf": xtb_args["uhf"]},
+                            {
+                                "gfn": 2,
+                                "charge": xtb_args["charge"],
+                                "uhf": xtb_args["uhf"],
+                            },
                             calc_dir,
                             cpus_per_worker,
                         )
@@ -736,10 +743,6 @@ class DativeLigand(Ligand):
                 connection_atom_id = binding_energies[0][0]
 
         self.connection_atom_id = connection_atom_id
-
-    def set_positions(self, positions):
-        if self.fixed:
-            self.positions = positions
 
 
 class BidentateLigand(Ligand):
@@ -802,17 +805,3 @@ class Metal:
 
     def __repr__(self):
         return f"{self.atom.GetAtoms()[0].GetSymbol()}"
-
-
-def optimize(args, workers):
-    """Do paralell optimization of all the entries in args."""
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-        results = executor.map(
-            xtb_calculate,
-            [arg[0] for arg in args],
-            [arg[1] for arg in args],
-            [arg[2] for arg in args],
-            [arg[3] for arg in args],
-            [arg[4] for arg in args],
-        )
-    return results

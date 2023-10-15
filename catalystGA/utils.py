@@ -1,3 +1,4 @@
+import concurrent.futures
 import sqlite3
 import textwrap
 from dataclasses import dataclass
@@ -6,6 +7,7 @@ from typing import Optional
 from rdkit.Chem import rdMolDescriptors
 
 from catalystGA.components import BaseCatalyst
+from catalystGA.xtb import xtb_calculate
 
 
 @dataclass
@@ -148,3 +150,17 @@ def str_table(title=None, headers=[], data=[], column_widths=[75, 14], percision
         table += "\n"
     table += sum(column_widths) * "=" + "\n" if frame else ""
     return table
+
+
+def optimize(args, workers):
+    """Do paralell optimization of all the entries in args."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        results = executor.map(
+            xtb_calculate,
+            [arg[0] for arg in args],
+            [arg[1] for arg in args],
+            [arg[2] for arg in args],
+            [arg[3] for arg in args],
+            [arg[4] for arg in args],
+        )
+    return results
