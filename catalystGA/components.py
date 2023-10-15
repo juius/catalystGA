@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 import math
 from abc import ABC, abstractmethod
@@ -10,8 +11,7 @@ from rdkit.Chem import rdChemReactions, rdDistGeom
 from rdkit.Chem.rdchem import Mol
 from rdkit.Chem.rdMolHash import HashFunction, MolHash
 
-from catalystGA.utils import optimize
-from catalystGA.xtb import ac2mol
+from catalystGA.xtb import ac2mol, xtb_calculate
 
 TRANSITION_METALS = (
     "[Sc,Ti,V,Cr,Mn,Fe,Co,Ni,Cu,Zn,Y,Zr,Nb,Mo,Tc,Ru,Rh,Pd,Ag,Cd,Lu,Hf,Ta,W,Re,Os,Ir,Pt,Au,Hg]"
@@ -579,8 +579,8 @@ class DativeLigand(Ligand):
         reference_smiles: str = "[Pd]<-P",
         xtb_args=None,
         n_cores: int = 1,
-        calc_dir: str = ".",
-        numConfs: int = 20,
+        calc_dir: Path = Path("."),
+        numConfs: int = 2,
     ) -> None:
         if smarts_match:
             connection_atom_id = None
@@ -644,7 +644,7 @@ class DativeLigand(Ligand):
                         mol,
                         numConfs=numConfs,
                         useRandomCoords=True,
-                        pruneRmsThresh=0.5,
+                        pruneRmsThresh=0.1,
                         randomSeed=42,
                     )
 
@@ -685,12 +685,13 @@ class DativeLigand(Ligand):
                         opt_adj = Chem.GetAdjacencyMatrix(ac2mol(atoms, opt_coords))
                         if not np.array_equal(adj, opt_adj):
                             _logger.warning(
-                                f"\tChange in adjacency matrix after GFN-FF optimization. Skipping conformer"
+                                f"\tchange in adjacency matrix after gfn-ff optimization. skipping conformer"
                             )
                             continue
                         else:
                             opt_coords_list.append(opt_coords)
                             ff_energies.append(res[2])
+                            _logger.info(f"Found {len(ff_energies)} valid ff energies")
 
                     # Construct args
                     args = [
@@ -805,3 +806,17 @@ class Metal:
 
     def __repr__(self):
         return f"{self.atom.GetAtoms()[0].GetSymbol()}"
+
+
+def optimize(args, workers):
+    """Do paralell optimization of all the entries in args."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        results = executor.map(
+            xtb_calculate,
+            [arg[0] for arg in args],
+            [arg[1] for arg in args],
+            [arg[2] for arg in args],
+            [arg[3] for arg in args],
+            [arg[4] for arg in args],
+        )
+    return results
