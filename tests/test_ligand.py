@@ -2,7 +2,7 @@ from unittest import TestCase, mock
 
 from rdkit import Chem
 
-from catalystGA import Ligand
+from catalystGA.components import DativeLigand, Ligand
 
 MOCK_ATOMS = [
     "Pd",
@@ -112,7 +112,8 @@ MOCK_COORDS2 = [
 class TestLigand(TestCase):
     def setUp(self):
         smiles = "CN(C)P(C)C(C)(C)C"
-        self.ligand = Ligand.from_smiles(smiles)
+        # self.ligand = Ligand.from_smiles(smiles)
+        self.ligand = DativeLigand(Chem.MolFromSmiles(smiles), smarts_match=True)
 
     def test_ligand_mol(self):
         # Check that the catalyst molecule is a Chem.Mol object
@@ -148,5 +149,5 @@ class TestLigand(TestCase):
         # Check that right donor atom is found from xtb calculations
         # xTB calculation in mocked and conformer generation is fixed with random seed
         self.ligand.donor_id = None
-        self.ligand.find_donor_atom(smarts_match=False)
+        self.ligand.find_donor_atom(smarts_match=False, xtb_args={"charge": 0, "uhf": 0})
         self.assertEqual(self.ligand.donor_id, 3)
