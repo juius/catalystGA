@@ -188,6 +188,8 @@ def stream(cmd, cwd=None, shell=True):
         cwd=cwd,
     )
     for stdout_line in iter(popen.stdout.readline, ""):
+        if "SKIPPING Reordering" in stdout_line:
+            popen.kill()
         yield stdout_line
 
     # Yield errors
