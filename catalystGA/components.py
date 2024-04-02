@@ -15,18 +15,20 @@ from rdkit.Chem.rdMolHash import HashFunction, MolHash
 
 from catalystGA.xtb import ac2mol, xtb_calculate
 
-TRANSITION_METALS = "[Sc,Ti,V,Cr,Mn,Fe,Co,Ni,Cu,Zn,Y,Zr,Nb,Mo,Tc,Ru,Rh,Pd,Ag,Cd,Lu,Hf,Ta,W,Re,Os,Ir,Pt,Au,Hg]"
+TRANSITION_METALS = (
+    "[Sc,Ti,V,Cr,Mn,Fe,Co,Ni,Cu,Zn,Y,Zr,Nb,Mo,Tc,Ru,Rh,Pd,Ag,Cd,Lu,Hf,Ta,W,Re,Os,Ir,Pt,Au,Hg]"
+)
 
 #  Dative bond patterns  ###
 
 CARBENE = "#6&v2H0,#6&v3H0"
 PHOSPHINE = "#15&v3"
 AMINE = "#7&v3"
-OXYGEN = "#8&v2"
+OXYGEN = "#8&v2,#8&v1"
 CO = "C-,v5"
 
 # Extra patterns based on tmQMg
-SULPHUR = "#16&v2"  # Doubly bound sulphurs
+SULPHUR = "#16&v2,#16&v3,#16&v1"  # sulphurs
 ARSENIC = "#33&v2,#33&v3"  # Triple or double bound Arsenic
 SELENIUM = "#34&v1,#34&v2"  # Single or double bound Selenium
 SILICON = "#14&v2"  # Double bound Silicon
@@ -46,9 +48,7 @@ SP3_CARBON = "#6X4;!H0"
 SP2_CARBON = "#6X3;!H0"
 
 DONORS_covalent = [HYDROXIDE, SECONDARY_AMINE, PRIMARY_AMINE, SP3_CARBON, SP2_CARBON]
-priority_covalent = [
-    Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS_covalent
-]
+priority_covalent = [Chem.MolFromSmarts("[" + pattern + "]") for pattern in DONORS_covalent]
 
 
 class BaseCatalyst:
@@ -97,9 +97,7 @@ class BaseCatalyst:
         # get transition metal
         metal_matches = mol.GetSubstructMatches(Chem.MolFromSmarts(TRANSITION_METALS))
         assert len(metal_matches) > 0, "No transition metal found in molecule"
-        assert (
-            len(metal_matches) < 2
-        ), "More than one transition metal found in molecule"
+        assert len(metal_matches) < 2, "More than one transition metal found in molecule"
         metal_id = metal_matches[0][0]
 
         # label donor atoms
@@ -184,9 +182,7 @@ class BaseCatalyst:
         for i, ligand in enumerate(self.ligands):
             # Add bonds. If the ligand is bidentate, two bonds are added
             if isinstance(ligand, BidentateLigand):
-                connection_atom_ids = [
-                    atom_ids[i + 1][id] for id in ligand.connection_atom_id
-                ]
+                connection_atom_ids = [atom_ids[i + 1][id] for id in ligand.connection_atom_id]
                 for id in connection_atom_ids:
                     emol.AddBond(id, 0, ligand.bond_type)
             else:
@@ -200,8 +196,7 @@ class BaseCatalyst:
                     # Get the anumic nums of the neighbors
                     neighbours_idx = [n.GetIdx() for n in neighbours]
                     neighbours_atomid = [
-                        ligand.mol.GetAtomWithIdx(n.GetIdx()).GetAtomicNum()
-                        for n in neighbours
+                        ligand.mol.GetAtomWithIdx(n.GetIdx()).GetAtomicNum() for n in neighbours
                     ]
                     # Check the neighbors. If any halogen we remove it.
                     for atom_id, idx in zip(neighbours_atomid, neighbours_idx):
@@ -224,7 +219,7 @@ class BaseCatalyst:
         try:
             Chem.SanitizeMol(mol)
         except Exception as e:
-            _logger.warning("Sanitation error! Molecule: {mol}")
+            _logger.warning(f"Sanitation error! Molecule: {mol}")
             _logger.warning(f"Traceback : {e}")
 
         # Set Chiral Tag and Permutation Order
@@ -346,9 +341,7 @@ class CovalentLigand(Ligand):
         connection_atom_id: int = None,
         smarts_match: bool = True,
     ) -> None:
-        super().__init__(
-            mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match
-        )
+        super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
         self.bond_type = Chem.BondType.SINGLE
 
     def find_donor_atom(
@@ -402,9 +395,7 @@ class CovalentLigand(Ligand):
                     connection_atom_id = matches[0][0]
             else:
                 # Make all possible constitutional isomers
-                _logger.info(
-                    f"Found {len(matches)} possible donor atoms in CovalentLigand."
-                )
+                _logger.info(f"Found {len(matches)} possible donor atoms in CovalentLigand.")
                 _logger.info(
                     "Generating all possible constitutional isomers and calculating binding energies."
                 )
@@ -482,9 +473,7 @@ class CovalentLigand(Ligand):
                     cpus_per_worker = n_cores // workers
 
                     # Create separate folders for all conformers
-                    calc_dirs = [
-                        calc_dir / f"{i}" for i in range(len(mol.GetConformers()))
-                    ]
+                    calc_dirs = [calc_dir / f"{i}" for i in range(len(mol.GetConformers()))]
                     [x.mkdir(exist_ok=True) for x in calc_dirs]
 
                     # Construct args
@@ -537,9 +526,7 @@ class CovalentLigand(Ligand):
 
                     sp_energies = [res[2] for res in result_sp]
 
-                    final_results = [
-                        (connection_atom_id, energy) for energy in sp_energies
-                    ]
+                    final_results = [(connection_atom_id, energy) for energy in sp_energies]
 
                     if len(final_results) == 0:
                         binding_energies.append((connection_atom_id, np.nan))
@@ -548,9 +535,7 @@ class CovalentLigand(Ligand):
                             key=lambda x: float("inf") if math.isnan(x[1]) else x[1]
                         )
                         binding_energies.append(final_results[0])
-                binding_energies.sort(
-                    key=lambda x: float("inf") if math.isnan(x[1]) else x[1]
-                )
+                binding_energies.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
 
                 _logger.info("Binding energies:")
                 _logger.info(
@@ -581,9 +566,7 @@ class DativeLigand(Ligand):
         connection_atom_id: None = None,
         smarts_match: bool = True,
     ) -> None:
-        super().__init__(
-            mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match
-        )
+        super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
         self.bond_type = Chem.BondType.DATIVE
 
     def find_donor_atom(
@@ -624,9 +607,7 @@ class DativeLigand(Ligand):
                 connection_atom_id = matches[0][0]
             else:
                 # Make all possible constitutional isomers
-                _logger.info(
-                    f"Found {len(matches)} possible donor atoms for DativeLigand."
-                )
+                _logger.info(f"Found {len(matches)} possible donor atoms for DativeLigand.")
                 _logger.info(
                     "Generating all possible constitutional isomers and calculating binding energies."
                 )
@@ -673,9 +654,7 @@ class DativeLigand(Ligand):
                     cpus_per_worker = n_cores // workers
 
                     # Create separate folders for all conformers
-                    calc_dirs = [
-                        calc_dir / f"{i}" for i in range(len(mol.GetConformers()))
-                    ]
+                    calc_dirs = [calc_dir / f"{i}" for i in range(len(mol.GetConformers()))]
                     [x.mkdir(exist_ok=True) for x in calc_dirs]
 
                     # Construct args
@@ -730,9 +709,7 @@ class DativeLigand(Ligand):
 
                     sp_energies = [res[2] for res in result_sp]
 
-                    final_results = [
-                        (connection_atom_id, energy) for energy in sp_energies
-                    ]
+                    final_results = [(connection_atom_id, energy) for energy in sp_energies]
 
                     if len(final_results) == 0:
                         binding_energies.append((connection_atom_id, np.nan))
@@ -742,9 +719,7 @@ class DativeLigand(Ligand):
                         )
                         binding_energies.append(final_results[0])
 
-                binding_energies.sort(
-                    key=lambda x: float("inf") if math.isnan(x[1]) else x[1]
-                )
+                binding_energies.sort(key=lambda x: float("inf") if math.isnan(x[1]) else x[1])
 
                 _logger.info("Binding energies:")
                 _logger.info(
@@ -770,9 +745,7 @@ class BidentateLigand(Ligand):
     """Bidentate ligands."""
 
     def __init__(self, mol, connection_atom_id=None, fixed=False, smarts_match=False):
-        super().__init__(
-            mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match
-        )
+        super().__init__(mol=mol, connection_atom_id=connection_atom_id, smarts_match=smarts_match)
         self.bond_type = Chem.BondType.DATIVE
 
     def find_donor_atom(
