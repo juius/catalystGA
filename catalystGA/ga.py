@@ -167,9 +167,7 @@ class GA(ABC):
         fitness = [ind.fitness for ind in population]
         ind_idx = 0
         while len(children) < self.population_size:
-            parent1, parent2 = np.random.choice(
-                population, p=fitness, size=2, replace=False
-            )
+            parent1, parent2 = np.random.choice(population, p=fitness, size=2, replace=False)
             child = self.crossover(parent1, parent2)
             if child and self.mol_options.check(child.mol):
                 child.parents = str((parent1.idx, parent2.idx))
@@ -233,9 +231,7 @@ class GA(ABC):
             calc_dir = calc_dir / jobid
             calc_dir.mkdir(exist_ok=True)
             for ligand in individual.ligands:
-                ligand.find_donor_atom(
-                    smarts_match, reference_smiles, n_cores, calc_dir
-                )
+                ligand.find_donor_atom(smarts_match, reference_smiles, n_cores, calc_dir)
             return [ligand.donor_id for ligand in individual.ligands]
 
         temp_dir = self.config["slurm"]["tmp_dir"] + "_" + str(uuid.uuid4())
@@ -265,9 +261,7 @@ class GA(ABC):
                 for ligand, donor_id in zip(population[i].ligands, donor_ids):
                     ligand.donor_id = donor_id
             except Exception as e:
-                print(
-                    f"Coulnd't find donor atoms for {population[i].smiles} with error {e}"
-                )
+                print(f"Coulnd't find donor atoms for {population[i].smiles} with error {e}")
 
         try:
             shutil.rmtree(temp_dir)
@@ -286,9 +280,9 @@ class GA(ABC):
             list: Sorted list of all individuals
         """
         population.sort(
-            key=lambda x: (maximize_score - 0.5) * float("-inf")
-            if math.isnan(x.score)
-            else x.score,
+            key=lambda x: (
+                (maximize_score - 0.5) * float("-inf") if math.isnan(x.score) else x.score
+            ),
             reverse=maximize_score,
         )
 

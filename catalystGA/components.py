@@ -61,11 +61,9 @@ class BaseCatalyst:
         self.ligands = ligands
         self.n_ligands = len(ligands)
         self.score = math.nan
-        self.energy = math.nan
         self.fitness = math.nan
         self.error = ""
         self.idx = (-1, -1)
-        self.timing = math.nan
         self.health_check()
 
     def __repr__(self):
@@ -209,7 +207,7 @@ class BaseCatalyst:
                 emol.AddBond(connection_atom_id, 0, ligand.bond_type)
 
             # Remove any explicit hydrogens on the atom. Otherwise this hydrogen gives sanitation error.
-            emol.GetAtomWithIdx(connection_atom_id).SetNumExplicitHs(0)
+            # emol.GetAtomWithIdx(connection_atom_id).SetNumExplicitHs(0)
 
         # Commit changes made and get mol
         emol.CommitBatchEdit()
