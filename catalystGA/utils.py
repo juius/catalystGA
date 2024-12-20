@@ -19,7 +19,10 @@ class MoleculeOptions:
     def check(self, mol):
         if not mol:
             return False
-        elif mol.GetNumHeavyAtoms() < self.min_size or mol.GetNumHeavyAtoms() > self.max_size:
+        elif (
+            mol.GetNumHeavyAtoms() < self.min_size
+            or mol.GetNumHeavyAtoms() > self.max_size
+        ):
             return False
         elif (
             self.num_rotatable_bonds
@@ -33,7 +36,9 @@ class MoleculeOptions:
 class GADatabase(object):
     def __init__(self, location: str, cat_type) -> None:
         """Initialize db class variables."""
-        self.connection = sqlite3.connect(location)
+        self.connection = sqlite3.connect(
+            location, check_same_thread=False
+        )  # To have paralellized reproduction)
         self.cur = self.connection.cursor()
         self.cat_type = cat_type
 
@@ -96,7 +101,12 @@ class GADatabase(object):
             VALUES (?, ?, ?, ?)
             """,
                 [
-                    (genid, f"{ind.idx[0]:03d}-{ind.idx[1]:03d}", ind.smiles, ind.fitness)
+                    (
+                        genid,
+                        f"{ind.idx[0]:03d}-{ind.idx[1]:03d}",
+                        ind.smiles,
+                        ind.fitness,
+                    )
                     for ind in population
                 ],
             )
@@ -131,10 +141,14 @@ class GADatabase(object):
             )
 
 
-def str_table(title=None, headers=[], data=[], column_widths=[75, 14], percision=4, frame=True):
+def str_table(
+    title=None, headers=[], data=[], column_widths=[75, 14], percision=4, frame=True
+):
     table = sum(column_widths) * "=" + "\n" if frame else ""
     if title:
-        table += textwrap.fill(title, width=len(title)).center(sum(column_widths)) + "\n"
+        table += (
+            textwrap.fill(title, width=len(title)).center(sum(column_widths)) + "\n"
+        )
 
     for i, column in enumerate(headers):
         table += f"{column:<{column_widths[i]}}"
