@@ -10,7 +10,6 @@ from catalystGA.components import BaseCatalyst
 
 @dataclass
 class MoleculeOptions:
-
     individual_type: BaseCatalyst
     min_size: int = 1
     max_size: int = 30
@@ -19,10 +18,7 @@ class MoleculeOptions:
     def check(self, mol):
         if not mol:
             return False
-        elif (
-            mol.GetNumHeavyAtoms() < self.min_size
-            or mol.GetNumHeavyAtoms() > self.max_size
-        ):
+        elif mol.GetNumHeavyAtoms() < self.min_size or mol.GetNumHeavyAtoms() > self.max_size:
             return False
         elif (
             self.num_rotatable_bonds
@@ -43,11 +39,11 @@ class GADatabase(object):
         self.cat_type = cat_type
 
     def commit(self):
-        """commit changes to database."""
+        """Commit changes to database."""
         self.connection.commit()
 
     def exists(self, smiles: str) -> bool:
-        """check if a smiles exists in the database."""
+        """Check if a smiles exists in the database."""
         with self.connection:
             self.cur.execute(
                 f"""
@@ -63,7 +59,7 @@ class GADatabase(object):
             return bool(self.cur.fetchone()[0])
 
     def create_tables(self) -> None:
-        """create a database table if it does not exist already."""
+        """Create a database table if it does not exist already."""
         table = """
             idx TEXT,
             smiles TEXT,
@@ -93,7 +89,7 @@ class GADatabase(object):
         )
 
     def add_generation(self, genid, population):
-        """add a generation to the database."""
+        """Add a generation to the database."""
         with self.connection:
             self.cur.executemany(
                 """
@@ -112,9 +108,9 @@ class GADatabase(object):
             )
 
     def add_individuals(self, genid, population):
-        """add individuals to the database (idx, smiles, score, timing, status
+        """Add individuals to the database (idx, smiles, score, timing, status
         and 'save_attributes')"""
-        columns = ["idx", "smiles", "score", "timing", "status"]
+        columns = ["idx", "smiles", "score"]
         columns += list(self.cat_type.save_attributes.keys())
         with self.connection:
             self.cur.executemany(
@@ -127,28 +123,16 @@ class GADatabase(object):
                         f"{ind.idx[0]:03d}-{ind.idx[1]:03d}",
                         ind.smiles,
                         ind.score,
-                        ind.timing,
-                        ind.error,
-                    )
-                    + tuple(
-                        [
-                            ind.__getattribute__(key)
-                            for key in list(self.cat_type.save_attributes.keys())
-                        ]
                     )
                     for ind in population
                 ],
             )
 
 
-def str_table(
-    title=None, headers=[], data=[], column_widths=[75, 14], percision=4, frame=True
-):
+def str_table(title=None, headers=[], data=[], column_widths=[75, 14], percision=4, frame=True):
     table = sum(column_widths) * "=" + "\n" if frame else ""
     if title:
-        table += (
-            textwrap.fill(title, width=len(title)).center(sum(column_widths)) + "\n"
-        )
+        table += textwrap.fill(title, width=len(title)).center(sum(column_widths)) + "\n"
 
     for i, column in enumerate(headers):
         table += f"{column:<{column_widths[i]}}"
