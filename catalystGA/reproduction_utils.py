@@ -71,9 +71,7 @@ def cut_ring(mol: Chem.Mol) -> List[Chem.Mol] or None:
         if random.random() < 0.5:
             if not mol.HasSubstructMatch(Chem.MolFromSmarts("[R]@[R]@[R]@[R]")):
                 return None
-            bis = random.choice(
-                mol.GetSubstructMatches(Chem.MolFromSmarts("[R]@[R]@[R]@[R]"))
-            )
+            bis = random.choice(mol.GetSubstructMatches(Chem.MolFromSmarts("[R]@[R]@[R]@[R]")))
             bis = (
                 (bis[0], bis[1]),
                 (bis[2], bis[3]),
@@ -81,9 +79,7 @@ def cut_ring(mol: Chem.Mol) -> List[Chem.Mol] or None:
         else:
             if not mol.HasSubstructMatch(Chem.MolFromSmarts("[R]@[R;!D2]@[R]")):
                 return None
-            bis = random.choice(
-                mol.GetSubstructMatches(Chem.MolFromSmarts("[R]@[R;!D2]@[R]"))
-            )
+            bis = random.choice(mol.GetSubstructMatches(Chem.MolFromSmarts("[R]@[R;!D2]@[R]")))
             bis = (
                 (bis[0], bis[1]),
                 (bis[1], bis[2]),
@@ -123,9 +119,7 @@ def ring_OK(mol: Chem.Mol) -> bool:
     max_cycle_length = max([len(j) for j in cycle_list])
     macro_cycle = max_cycle_length > 6
 
-    double_bond_in_small_ring = mol.HasSubstructMatch(
-        Chem.MolFromSmarts("[r3,r4]=[r3,r4]")
-    )
+    double_bond_in_small_ring = mol.HasSubstructMatch(Chem.MolFromSmarts("[r3,r4]=[r3,r4]"))
 
     return not ring_allene and not macro_cycle and not double_bond_in_small_ring
 
@@ -161,9 +155,7 @@ def crossover_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
         Chem.Mol or None
     """
     ring_smarts = Chem.MolFromSmarts("[R]")
-    if not parent_A.HasSubstructMatch(ring_smarts) and not parent_B.HasSubstructMatch(
-        ring_smarts
-    ):
+    if not parent_A.HasSubstructMatch(ring_smarts) and not parent_B.HasSubstructMatch(ring_smarts):
         return None
 
     rxn_smarts1 = [
@@ -255,15 +247,17 @@ def graph_crossover(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
     """
     parent_A = Chem.RemoveHs(parent_A)
     parent_B = Chem.RemoveHs(parent_B)
+    print("In graph_crossover", parent_A, parent_B)
 
     parent_smiles = [Chem.MolToSmiles(parent_A), Chem.MolToSmiles(parent_B)]
     try:
         Chem.Kekulize(parent_A, clearAromaticFlags=True)
         Chem.Kekulize(parent_B, clearAromaticFlags=True)
-    except:
-        pass
+    except Exception as e:
+        print(e)
     for i in range(10):
         if random.random() <= 0.5:
+            print("crossover_non_ring")
             new_mol = crossover_non_ring(parent_A, parent_B)
             if new_mol != None:
                 new_smiles = Chem.MolToSmiles(new_mol)
@@ -435,7 +429,6 @@ def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
 
 
 def set_mapping(mol, coordinating_atoms):
-
     for c in coordinating_atoms:
         a = mol.GetAtomWithIdx(int(c))
         a.SetIntProp("__coordinatingAtom", a.GetIdx())
