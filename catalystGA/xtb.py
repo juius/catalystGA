@@ -1,15 +1,17 @@
 import logging
 import os
 import random
+import re
 import shutil
-import signal
 import string
 import subprocess
 import warnings
 from pathlib import Path
-from typing import Generator, List
+from typing import List
 
 import numpy as np
+from rdkit import Chem
+from rdkit.Chem import rdDetermineBonds
 
 alphabet = string.ascii_lowercase + string.digits
 
@@ -17,6 +19,50 @@ alphabet = string.ascii_lowercase + string.digits
 STANDARD_PROPERTIES = {"xtb": {"total energy": "electronic_energy"}, "orca": {}}
 
 _logger = logging.getLogger("xtb")
+
+
+def ac2mol(
+    atoms: List[str],
+    coords: List[list],
+    charge: int = 0,
+    perceive_connectivity: bool = True,
+    sanitize: bool = True,
+):
+    """Converts atom symbols and coordinates to RDKit molecule."""
+    xyz = ac2xyz(atoms, coords)
+    rdkit_mol = Chem.MolFromXYZBlock(xyz)
+    if sanitize:
+        Chem.SanitizeMol(rdkit_mol)
+    if charge != 0:
+        rdkit_mol.GetAtomWithIdx(0).SetFormalCharge(charge)
+    if perceive_connectivity:
+        determineConnectivity(rdkit_mol)
+    return rdkit_mol
+
+
+def adjacency_check(adj1, atoms, coords):
+    "For detecting broken bonds during optimizations"
+    mol = ac2mol(atoms, coords)
+    determineConnectivity(mol, useHueckel=True)
+    adj2 = Chem.GetAdjacencyMatrix(mol, force=True)
+    return np.array_equal(adj1, adj2)
+
+
+def determineConnectivity(mol, **kwargs):
+    """Determine connectivity in molecule.
+
+    Use to check if bonds are broken in xTB optimizations
+    """
+    try:
+        rdDetermineBonds.DetermineConnectivity(mol, **kwargs)
+    finally:
+        # cleanup extended hueckel files
+        try:
+            os.remove("nul")
+            os.remove("run.out")
+        except FileNotFoundError:
+            pass
+    return mol
 
 
 def xyz2ac(xyzblock: str):
@@ -313,10 +359,21 @@ def read_xtb_results(lines: list[str]) -> dict:
 
     def _get_runtime(lines: list[str]) -> float:
         """Reads xTB runtime in seconds."""
-        _, _, days, _, hours, _, minutes, _, seconds, _ = line.strip().split()
-        total_seconds = (
-            float(seconds) + 60 * float(minutes) + 360 * float(hours) + 86400 * float(days)
-        )
+
+        pattern = r":\s+(\d+)\s+d,\s+(\d+)\s+h,\s+(\d+)\s+min,\s+([\d.]+)\s+sec"
+        match = re.search(pattern, line)
+
+        total_seconds = None
+        if match:
+            days_str, hours_str, mins_str, secs_str = match.groups()
+
+            days = int(days_str)
+            hours = int(hours_str)
+            mins = int(mins_str)
+            secs = float(secs_str)
+
+            # If you want the total time in seconds:
+            total_seconds = days * 86400 + hours * 3600 + mins * 60 + secs
         return total_seconds
 
     property_start_idx, dipole_idx, quadrupole_idx, runtime_idx, polarizability_idx = (
@@ -327,6 +384,7 @@ def read_xtb_results(lines: list[str]) -> dict:
         np.nan,
     )
     properties = {}
+    wall_time, cpu_time = np.nan, np.nan
     for i, line in enumerate(lines):
         line = line.strip()
         if "xtb version" in line:
@@ -377,7 +435,6 @@ def read_xtb_results(lines: list[str]) -> dict:
             quadrupole_idx = np.nan
 
         # read runtimes
-        wall_time, cpu_time = np.nan, np.nan
         if i > runtime_idx:
             if i == (runtime_idx + 1):
                 wall_time = _get_runtime(line)
@@ -409,32 +466,54 @@ def read_xtb_results(lines: list[str]) -> dict:
     return results
 
 
-def stream(cmd: str, cwd: None | Path = None, shell: bool = True) -> Generator[str, None, None]:
-    """Execute a command and stream stdout and stderr concurrently."""
-    with subprocess.Popen(
+# def stream(cmd: str, cwd: None | Path = None, shell: bool = True) -> Generator[str, None, None]:
+#     """Execute a command and stream stdout and stderr concurrently."""
+#     with subprocess.Popen(
+#         cmd,
+#         stdout=subprocess.PIPE,
+#         stderr=subprocess.PIPE,
+#         text=True,  # Use text mode for string-based reading
+#         shell=shell,
+#         cwd=cwd,
+#         bufsize=1,  # Line-buffered output for immediate feedback
+#     ) as process:
+#         try:
+#             for line in iter(process.stdout.readline, ""):
+#                 yield line.strip()
+#             for line in iter(process.stderr.readline, ""):
+#                 yield line.strip()
+#         except KeyboardInterrupt:
+#             print("\nCtrl+C pressed. Terminating the process...")
+#             os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+#             process.wait()
+#             print("Process terminated.")
+#         finally:
+#             process.stdout.close()
+#             process.stderr.close()
+#             process.wait()
+
+
+def stream(cmd, cwd=None, shell=True):
+    """Execute command in directory, and stream stdout."""
+    popen = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,  # Use text mode for string-based reading
+        universal_newlines=True,
         shell=shell,
         cwd=cwd,
-        preexec_fn=os.setsid,  # Start a new process group for better control
-        bufsize=1,  # Line-buffered output for immediate feedback
-    ) as process:
-        try:
-            for line in iter(process.stdout.readline, ""):
-                yield line.strip()
-            for line in iter(process.stderr.readline, ""):
-                yield line.strip()
-        except KeyboardInterrupt:
-            print("\nCtrl+C pressed. Terminating the process...")
-            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-            process.wait()
-            print("Process terminated.")
-        finally:
-            process.stdout.close()
-            process.stderr.close()
-            process.wait()
+    )
+    for stdout_line in iter(popen.stdout.readline, ""):
+        if "SKIPPING Reordering" in stdout_line:
+            popen.kill()
+        yield stdout_line
+
+    # Yield errors
+    stderr = popen.stderr.read()
+    popen.stdout.close()
+    yield stderr
+
+    return
 
 
 def check_executable(executable: str):
