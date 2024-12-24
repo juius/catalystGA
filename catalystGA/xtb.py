@@ -5,6 +5,8 @@ import re
 import shutil
 import string
 import subprocess
+import threading
+import time
 import warnings
 from pathlib import Path
 from typing import List
@@ -493,8 +495,9 @@ def read_xtb_results(lines: list[str]) -> dict:
 #             process.wait()
 
 
-def stream(cmd, cwd=None, shell=True):
-    """Execute command in directory, and stream stdout."""
+def stream(cmd, cwd=None, shell=True, timeout=10):
+    """Execute command in directory, and stream stdout with a timeout."""
+
     popen = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -503,17 +506,50 @@ def stream(cmd, cwd=None, shell=True):
         shell=shell,
         cwd=cwd,
     )
-    for stdout_line in iter(popen.stdout.readline, ""):
-        if "SKIPPING Reordering" in stdout_line:
-            popen.kill()
-        yield stdout_line
 
-    # Yield errors
-    stderr = popen.stderr.read()
-    popen.stdout.close()
-    yield stderr
+    # This timer will kill the process after `timeout` seconds
+    timer = threading.Timer(60*9, popen.kill)
+    timer.start()
 
-    return
+    try:
+        for stdout_line in iter(popen.stdout.readline, ""):
+            if "SKIPPING Reordering" in stdout_line:
+                popen.kill()
+            yield stdout_line
+
+        # Capture any remaining errors
+        stderr = popen.stderr.read()
+        yield stderr
+
+    finally:
+        # Clean up and make sure the timer is canceled if process finishes earlier
+        popen.stdout.close()
+        popen.stderr.close()
+        popen.wait()     # Ensure the subprocess is fully terminated
+        timer.cancel()   # Cancel the timer if still pending
+
+
+# def stream(cmd, cwd=None, shell=True):
+#     """Execute command in directory, and stream stdout."""
+#     popen = subprocess.Popen(
+#         cmd,
+#         stdout=subprocess.PIPE,
+#         stderr=subprocess.PIPE,
+#         universal_newlines=True,
+#         shell=shell,
+#         cwd=cwd,
+#     )
+#     for stdout_line in iter(popen.stdout.readline, ""):
+#         if "SKIPPING Reordering" in stdout_line:
+#             popen.kill()
+#         yield stdout_line
+#
+#     # Yield errors
+#     stderr = popen.stderr.read()
+#     popen.stdout.close()
+#     yield stderr
+#
+#     return
 
 
 def check_executable(executable: str):
