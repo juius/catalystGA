@@ -6,7 +6,6 @@ import shutil
 import string
 import subprocess
 import threading
-import time
 import warnings
 from pathlib import Path
 from typing import List
@@ -99,6 +98,7 @@ def xtb_calculate(
     options: dict = {},
     scr: str = ".",
     n_cores: int = 1,
+    timeout: float = 10,
     detailed_input: None | dict = None,
     detailed_input_str: None | str = None,
     calc_dir: None | str = None,
@@ -153,7 +153,7 @@ def xtb_calculate(
             inp.write(detailed_input_str)
         cmd += f"--input {fpath.name} "
 
-    lines = run_xtb((cmd, xyz_file))
+    lines = run_xtb((cmd, xyz_file), timeout=timeout)
     if not normal_termination(lines) and not force:
         _logger.warning("xTB did not terminate normally")
         _logger.info("".join(lines))
@@ -238,11 +238,13 @@ def write_detailed_input(details_dict: dict, scr: Path) -> Path:
     return fpath
 
 
-def run_xtb(args: tuple[str]) -> list[str]:
+def run_xtb(args: tuple[str], timeout=10) -> list[str]:
     """Run xTB command for xyz-file in parent directory, logs and returns
     output."""
     cmd, xyz_file = args
-    generator = stream(f"{cmd}-- {xyz_file.name} | tee xtb.out", cwd=xyz_file.parent)
+    generator = stream(
+        f"{cmd}-- {xyz_file.name} | tee xtb.out", cwd=xyz_file.parent, timeout=timeout
+    )
     lines = []
     for line in generator:
         lines.append(line)
@@ -508,7 +510,7 @@ def stream(cmd, cwd=None, shell=True, timeout=10):
     )
 
     # This timer will kill the process after `timeout` seconds
-    timer = threading.Timer(60*9, popen.kill)
+    timer = threading.Timer(60 * 9, popen.kill)
     timer.start()
 
     try:
@@ -525,8 +527,8 @@ def stream(cmd, cwd=None, shell=True, timeout=10):
         # Clean up and make sure the timer is canceled if process finishes earlier
         popen.stdout.close()
         popen.stderr.close()
-        popen.wait()     # Ensure the subprocess is fully terminated
-        timer.cancel()   # Cancel the timer if still pending
+        popen.wait()  # Ensure the subprocess is fully terminated
+        timer.cancel()  # Cancel the timer if still pending
 
 
 # def stream(cmd, cwd=None, shell=True):
