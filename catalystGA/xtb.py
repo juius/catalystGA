@@ -248,7 +248,7 @@ def run_xtb(args: tuple[str], timeout=10) -> list[str]:
     lines = []
     for line in generator:
         lines.append(line)
-        _logger.debug(line.rstrip("\n"))
+        # _logger.debug(line.rstrip("\n"))
     return lines
 
 
