@@ -287,12 +287,9 @@ class GA(ABC):
             list: Sorted list of all individuals
         """
 
-        reverse = False if maximize_score else True
         population.sort(
-            key=lambda x: (
-                (maximize_score - 0.5) * float("-inf") if math.isnan(x.score) else x.score
-            ),
-            reverse=reverse,
+            key=lambda x: (float("-inf") if math.isnan(x.score) else x.score),
+            reverse=True,
         )
 
     def append_results(self, results, gennum, detailed=False):

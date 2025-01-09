@@ -510,7 +510,7 @@ def stream(cmd, cwd=None, shell=True, timeout=10):
     )
 
     # This timer will kill the process after `timeout` seconds
-    timer = threading.Timer(60 * 9, popen.kill)
+    timer = threading.Timer(60 * timeout, popen.kill)
     timer.start()
 
     try:
