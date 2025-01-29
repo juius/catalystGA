@@ -3,9 +3,8 @@ import random
 from typing import List
 
 import numpy as np
-from hide_warnings import hide_warnings
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import rdChemReactions
 
 
 def list_crossover(genome1: List, genome2: List, n_cutpoints: int = 1) -> List:
@@ -174,7 +173,7 @@ def crossover_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
 
         new_mol_trial = []
         for rs in rxn_smarts1:
-            rxn1 = AllChem.ReactionFromSmarts(rs)
+            rxn1 = rdChemReactions.ReactionFromSmarts(rs)
             new_mol_trial = []
             for fa in fragments_A:
                 for fb in fragments_B:
@@ -182,7 +181,7 @@ def crossover_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or None:
 
         new_mols = []
         for rs in rxn_smarts2:
-            rxn2 = AllChem.ReactionFromSmarts(rs)
+            rxn2 = rdChemReactions.ReactionFromSmarts(rs)
             for m in new_mol_trial:
                 m = m[0]
                 if mol_OK(m):
@@ -215,7 +214,7 @@ def crossover_non_ring(parent_A: Chem.Mol, parent_B: Chem.Mol) -> Chem.Mol or No
         fragments_B = cut(parent_B)
         if fragments_A == None or fragments_B == None:
             return None
-        rxn = AllChem.ReactionFromSmarts("[*:1]-[1*].[1*]-[*:2]>>[*:1]-[*:2]")
+        rxn = rdChemReactions.ReactionFromSmarts("[*:1]-[1*].[1*]-[*:2]>>[*:1]-[*:2]")
         new_mol_trial = []
         for fa in fragments_A:
             for fb in fragments_B:
@@ -385,7 +384,6 @@ def change_atom(mol: Chem.Mol) -> str:
     return "[X:1]>>[Y:1]".replace("X", X).replace("Y", Y)
 
 
-@hide_warnings
 def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
     """Performs mutation on molecule (add, remove or replace bond or atom)
 
@@ -409,7 +407,7 @@ def graph_mutate(mol: Chem.Mol) -> Chem.Mol or None:
         rxn_smarts_list[6] = append_atom()
         rxn_smarts = np.random.choice(rxn_smarts_list, p=p)
 
-        rxn = AllChem.ReactionFromSmarts(rxn_smarts)
+        rxn = rdChemReactions.ReactionFromSmarts(rxn_smarts)
 
         new_mol_trial = rxn.RunReactants((mol,))
 
