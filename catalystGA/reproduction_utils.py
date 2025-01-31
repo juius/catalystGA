@@ -371,15 +371,15 @@ def add_ring() -> str:
 
 def change_atom(mol: Chem.Mol) -> str:
     """Reaction SMARTS to replace a single atom in a molecule."""
-    choices = ["#6", "#7", "#8", "#9", "#16", "#17", "#35"]
-    p = [0.15, 0.15, 0.14, 0.14, 0.14, 0.14, 0.14]
+    choices = ["#6", "#7", "#8", "#9", "#16", "#17", "#35", "#15", "#14", "#53"]
+    # p = [0.15, 0.15, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14,0.14,0.14]
 
-    X = np.random.choice(choices, p=p)
+    X = np.random.choice(choices)
     while not mol.HasSubstructMatch(Chem.MolFromSmarts("[" + X + "]")):
-        X = np.random.choice(choices, p=p)
-    Y = np.random.choice(choices, p=p)
+        X = np.random.choice(choices)
+    Y = np.random.choice(choices)
     while Y == X:
-        Y = np.random.choice(choices, p=p)
+        Y = np.random.choice(choices)
 
     return "[X:1]>>[Y:1]".replace("X", X).replace("Y", Y)
 
