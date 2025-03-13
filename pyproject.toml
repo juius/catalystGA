@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "catalystGA"
+version = "0.1.0"
+description = "Toold for genetic algorithm"
+readme = "README.md"
+authors = [{ name = "Author Name", email = "author@example.com" }]
+keywords = ["genetic algorithm", "chemistry", "catalysts"]
+
+# Declare all relevant dependencies for catalystGA here:
+# dependencies = [
+#     "numpy",
+#     "pandas",
+#     "scipy",
+#     # etc.
+# ]
+
+[project.urls]
+"Source" = "https://github.com/juius/catalystGA"
+"Documentation" = "https://github.com/juius/catalystGA/blob/magnus_playground/README.md"
