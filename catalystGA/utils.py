@@ -51,7 +51,7 @@ class GADatabase(object):
                     EXISTS(
                         SELECT 1
                         FROM individuals
-                        WHERE smiles="{smiles}"
+                        WHERE smiles='{smiles}'
                         LIMIT 1
                         );
                     """
