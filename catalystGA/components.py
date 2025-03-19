@@ -799,6 +799,440 @@ class Metal:
         return f"{self.atom.GetAtoms()[0].GetSymbol()}"
 
 
+class Ligand:
+    """Class representing a ligand."""
+
+    def __init__(
+        self,
+        smiles,
+        connection_atom_ids=None,
+    ) -> None:
+        self.mol = Chem.MolFromSmiles(smiles)
+        self.smiles = smiles
+        if connection_atom_ids:
+            self.connection_atom_ids = connection_atom_ids
+        else:
+            # Define a monodentate binding site
+            connection_atom_ids = None
+            for p in priority_dative:
+                match = self.mol.GetSubstructMatch(p)
+                if len(match) > 0:
+                    self.connection_atom_ids = [match[0]]
+                    break
+            if not self.connection_atom_ids:
+                _logger.warning(
+                    f"No donor atom found for Ligand {Chem.MolToSmiles(Chem.RemoveHs(self.mol))}"
+                )
+
+    def __repr__(self):
+        return f"{MolHash(Chem.RemoveHs(self.mol), HashFunction.CanonicalSmiles)}"
+
+    def __hash__(self) -> int:
+        return hash(MolHash(self.mol, HashFunction.CanonicalSmiles))
+
+    def __eq__(self, other):
+        # type(self) ensures that different child classes of this base class are not seen as equal
+        if isinstance(other, type(self)):
+            if self.__hash__() == other.__hash__():
+                return True
+        return False
+
+
+class TMC:
+    """Class to represent TMC."""
+
+    save_attributes = {}
+
+    def __init__(self, metal: Chem.Mol, ligands: List[Ligand]):
+        self.score = math.nan
+        self.fitness = math.nan
+        self.error = ""
+        self.idx = (-1, -1)
+        self.metal = metal
+        self.ligands = ligands
+
+        # Caches ligands to not rerun assmble code all the time
+        self._cached_mol = self.assemble()
+        self._cached_smiles = Chem.MolToSmiles(self._cached_mol)
+        self._ligands_snapshot = None
+
+        self.tm_idx = self._cached_mol.GetSubstructMatch(Chem.MolFromSmarts(TRANSITION_METALS))[0]
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.metal},{self.ligands})"
+
+    def __hash__(self) -> int:
+        return hash(self.smiles)
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, TMC):
+            if self.__hash__() == other.__hash__():
+                return True
+        return False
+
+    @property
+    def mol(self):
+        if self._ligands_changed():
+            mol = self.assemble()
+            self._cached_smiles = MolHash(Chem.RemoveHs(mol), HashFunction.CanonicalSmiles)
+            self._cached_mol = Chem.MolFromSmiles(self._cached_smiles)
+        return self._cached_mol
+
+    @property
+    def smiles(self) -> str:
+        if self._ligands_changed():
+            mol = self.assemble()
+            self._cached_smiles = MolHash(Chem.RemoveHs(mol), HashFunction.CanonicalSmiles)
+            self._cached_mol = Chem.MolFromSmiles(self._cached_smiles)
+        return self._cached_smiles
+
+    def _ligands_changed(self) -> bool:
+        """Check if the ligands list has changed since the last assemble."""
+        ligands_snapshot = [(lig.smiles, lig.connection_atom_ids) for lig in self.ligands]
+        if ligands_snapshot != self._ligands_snapshot:
+            self._ligands_snapshot = ligands_snapshot
+            return True
+        return False
+
+    @property
+    def dispatcher(self):
+        "Utility function used to dispatch the scoring"
+        return {
+            "calculate_score": self.calculate_score,
+            "toy": self.toy,
+        }
+
+    def toy(self, args):
+        "Scoring function to use for debugging"
+        _logger.info("Getting logp")
+        self.score = Descriptors.MolLogP(self.mol)
+        _logger.info("Got logP")
+
+    def save(self, directory=".") -> None:
+        """Dump TMC object into file."""
+        filename = os.path.join(directory, "../ind.pkl")
+        with open(filename, "wb+") as output:
+            pickle.dump(self, output, pickle.HIGHEST_PROTOCOL)
+
+    def get_props(self):
+        return vars(self)
+
+    @classmethod
+    def from_smiles(cls, smiles: str):
+        """Generate TMC from SMILES string.
+
+        Args:
+            smiles (str): TMC SMILES string
+
+        Returns:
+            Instance of TMC Class
+        """
+        mol = Chem.MolFromSmiles(smiles)
+        test_smiles = smiles
+        assert mol, "Could not parse SMILES string"
+
+        # get transition metal
+        metal_matches = mol.GetSubstructMatches(Chem.MolFromSmarts(TRANSITION_METALS))
+        assert len(metal_matches) > 0, "No transition metal found in molecule"
+        assert len(metal_matches) < 2, "More than one transition metal found in molecule"
+
+        tmc_idx = None
+        for a in mol.GetAtoms():
+            a.SetIntProp("__origIdx", a.GetIdx())
+            if a.GetAtomicNum() in TRANSITION_METALS_NUM:
+                # tm_atom = a.GetSymbol()
+                tmc_idx = a.GetIdx()
+
+        # Get TM neighbors to get ligand coonnection atom ids.
+        coordinating_atoms = np.nonzero(Chem.rdmolops.GetAdjacencyMatrix(mol)[tmc_idx, :])[0]
+
+        mdis = rdMolStandardize.MetalDisconnector(params)
+        mdis.SetMetalNon(Chem.MolFromSmarts(MetalNon_Hg))
+        frags = mdis.Disconnect(mol)
+        frag_mols = rdmolops.GetMolFrags(frags, asMols=True)
+
+        # Get ligand list
+        ligands = []
+        for i, f in enumerate(frag_mols):
+            if f.GetSubstructMatch(Chem.MolFromSmarts(TRANSITION_METALS)):
+                metal = Metal(f)
+                continue
+            # print(lig_charge)
+            lig_coordinating_atoms = [
+                a.GetIdx() for a in f.GetAtoms() if a.GetIntProp("__origIdx") in coordinating_atoms
+            ]
+
+            # Get mapped ids
+            smiles, mapper = get_smiles_atomidx_mapping(f)
+            lig_coordinating_atoms = [mapper[x] for x in lig_coordinating_atoms]
+
+            ligands.append(
+                Ligand(
+                    Chem.MolToSmiles(f),
+                    connection_atom_ids=lig_coordinating_atoms,
+                )
+            )
+
+        # Instantiate based on ligand list.
+        cat = cls(metal, ligands)
+        assert (
+            cat.smiles == test_smiles
+        ), f"SMILES string does not match input SMILES: {cat.smiles} != {test_smiles}"
+        return cat
+
+    def assemble(
+        self,
+        extraLigands=None,
+        chiralTag=None,
+        permutationOrder=None,
+    ) -> Mol:
+        """Forms bonds from Ligands to Metal Center, adds any extra Ligands
+        from Reaction SMARTS and sets the chiral tag of the metal center and
+        permutation order of the Ligands.
+
+        Args:
+            extraLigands (str, optional): Reaction SMARTS to add ligands to the molecule. Defaults to None.
+            chiralTag (Chem.rdchem.ChiralType, optional): Chiral Tag of Metal Atom. Defaults to None.
+            permutationOrder (int, optional): Permutation order of ligands. Defaults to None.
+
+        Returns:
+            Chem.Mol: Catalyst Molecule
+        """
+        # Initialize Mol
+        tmp = self.metal.atom
+
+        # Add Extra Ligands
+        if extraLigands:
+            rxn = rdChemReactions.ReactionFromSmarts(extraLigands)
+            tmp = rxn.RunReactants((tmp,))[0][0]
+
+        # Add hydrogens
+        Chem.SanitizeMol(tmp)
+        tmp = Chem.AddHs(tmp)
+
+        # Add ligands
+        for ligand in self.ligands:
+            tmp = Chem.CombineMols(tmp, ligand.mol)
+
+        # Start editing mol
+        emol = Chem.RWMol(tmp)
+        emol.BeginBatchEdit()
+
+        atom_ids = Chem.GetMolFrags(tmp)
+        for i, ligand in enumerate(self.ligands):
+            connection_atom_ids = ligand.connection_atom_ids
+
+            # Add bond to metal.
+            mapped_coords = atom_ids[i + 1]
+            for elem in connection_atom_ids:
+                connection_atom_id = mapped_coords[elem]
+                emol.AddBond(connection_atom_id, 0, Chem.BondType.DATIVE)
+
+        # Commit changes made and get mol
+        emol.CommitBatchEdit()
+        mol = emol.GetMol()
+
+        # Catch sanitation errors. NB! could lead to error later in workflow.
+        try:
+            Chem.SanitizeMol(mol)
+        except Exception as e:
+            _logger.warning(f"Sanitation error! Molecule: {mol}")
+            _logger.warning(f"Traceback : {e}")
+
+        # Set Chiral Tag and Permutation Order
+        if chiralTag:
+            metal = mol.GetAtomWithIdx(self.tm_idx)
+            self._setChiralTagAndOrder(metal, chiralTag, permutationOrder)
+        try:
+            Chem.SanitizeMol(mol)
+        except Exception as e:
+            _logger.warning("Sanitation error after applying chiral tag! Molecule: {mol}")
+            _logger.warning(f"Traceback : {e}")
+        return mol
+
+    @staticmethod
+    def _setChiralTagAndOrder(atom, chiralTag, chiralPermutation=None):
+        """Sets the chiral tag of an atom and the permutation order of attached
+        ligands.
+
+        Args:
+            atom (Chem.Atom): Atom for which to set the chiral tag/permutation order properties
+            chiralTag (Chem.rdchem.ChiralType, optional): Chiral Tag of Metal Atom. Defaults to None.
+            permutationOrder (int, optional): Permutation order of ligands. Defaults to None.
+        """
+        atom.SetChiralTag(chiralTag)
+        if chiralPermutation:
+            atom.SetIntProp("_chiralPermutation", chiralPermutation)
+
+    def embed(
+        self,
+        extraLigands=None,
+        chiralTag=None,
+        permutationOrder=None,
+        numConfs=10,
+        useRandomCoords=True,
+        pruneRmsThresh=-1,
+        **kwargs,
+    ):
+        """Embed the TMC Molecule using ETKDG.
+
+        Args:
+            extraLigands (str, optional): Reaction SMARTS to add ligands to the molecule. Defaults to None.
+            chiralTag (Chem.rdchem.ChiralType, optional): Chiral Tag of Metal Atom. Defaults to None.
+            permutationOrder (int, optional): Permutation order of ligands. Defaults to None.
+            numConfs (int, optional): Number of Conformers to embed. Defaults to 10.
+            useRandomCoords (bool, optional): Embedding option. Defaults to True.
+            pruneRmsThresh (int, optional): Conformers within this threshold will be removed. Defaults to -1.
+
+        Returns:
+            Chem.Mol: Catalyst Molecule with conformers embedded
+        """
+        mol3d = self.assemble(extraLigands, chiralTag, permutationOrder)
+        Chem.SanitizeMol(mol3d)
+        mol3d = Chem.AddHs(mol3d)
+        # Embed with ETKDG
+        _ = rdDistGeom.EmbedMultipleConfs(
+            mol3d,
+            numConfs=numConfs,
+            useRandomCoords=useRandomCoords,
+            pruneRmsThresh=pruneRmsThresh,
+            **kwargs,
+        )
+        return mol3d
+
+    def calculate_score(self, args) -> None:
+        """Calculate score for the catalyst."""
+
+        scratch = args["output_dir"] / args["scratch"]
+        scratch.mkdir(parents=True, exist_ok=True)
+        start = time.time()
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)-5.5s]  %(message)s",
+            handlers=[
+                logging.StreamHandler(),  # For debugging. Can be removed on remote
+            ],
+        )
+        _logger.info(socket.gethostname())
+        _logger.info(f"Calculating score for {self}\nSMILES: {self.smiles}\n")
+
+        args["charge"] = Chem.GetFormalCharge(self.mol)
+        args["uhf"] = 2
+        args["multiplicity"] = 3
+
+        # Create moles with different permutations of the ligands. We only use the trans configuration
+        permutation_mols = []
+        for permutationOrder in [2]:
+            permutation_mols.append(
+                self.embed(
+                    chiralTag=Chem.CHI_SQUAREPLANAR,
+                    permutationOrder=permutationOrder,
+                    numConfs=args["n_confs"],
+                    useRandomCoords=True,
+                    pruneRmsThresh=args["rms_prune"],
+                    numThreads=args["cpus_per_mol"],
+                )
+            )
+        args["timeout_min"] = args["timeout_min"] // len(permutation_mols) - 1
+
+        results_dict = defaultdict(dict)
+
+        # XTB calulation optikons
+        options = {"pop": True, "opt": True}
+
+        _logger.info("Running xtb with args: \n")
+        _logger.info(json.dumps(options, indent=4), extra={"simple": True})
+        _logger.info(json.dumps(make_json_serializable(args), indent=4), extra={"simple": True})
+
+        for i, permutation in enumerate(permutation_mols):
+            start_connectivity = Chem.GetAdjacencyMatrix(permutation)
+            _logger.info(f"Checking permutation {Chem.MolToSmiles(permutation)}")
+
+            # Instantiate optimizer class
+            tempdir = scratch / "permutation" / f"{self.idx[0]:03d}_{self.idx[1]:03d}_{i}"
+            tempdir.mkdir(parents=True, exist_ok=True)
+            args["name"] = tempdir
+
+            xyz_block = Chem.MolToXYZBlock(permutation)
+            atoms, coords = xyz2ac(xyz_block)
+
+            results = xtb_calculate(
+                atoms=atoms,
+                coords=coords,
+                charge=args["charge"],
+                multiplicity=args["multiplicity"],
+                n_cores=args["cpus_per_mol"],
+                timeout=args["timeout_min"],
+                calc_dir=tempdir,
+                options=options,
+            )
+            if not results["normal_termination"]:
+                _logger.info(f"Permtation {i} did not terminate normally")
+                continue
+            atoms = results["atoms"]
+            coords = results["coords"]
+
+            # Check for bonds breaking during calcultion
+            is_good = adjacency_check(start_connectivity, atoms=atoms, coords=coords)
+            if is_good:
+                results_dict[i] = results
+
+        _logger.info(f"Finished all permutations for {repr(self)}, {self.idx}")
+        # Save results
+        if not results_dict:
+            _logger.warning(f"No valid calculations for {self.idx}. Returning from calculation")
+            return
+
+        # Get the best charge results
+        if args["maximize_score"]:
+            largest_dict = max(
+                results_dict, key=lambda d: results_dict[d]["mulliken"][self.tm_idx]
+            )
+        else:
+            largest_dict = min(
+                results_dict, key=lambda d: results_dict[d]["mulliken"][self.tm_idx]
+            )
+
+        self.results = results_dict[largest_dict]
+
+        try:
+            # Get the normalized score
+            score = self.results["mulliken"][self.tm_idx]
+            _logger.debug(args["maximize_score"])
+            norm = self.get_normalized_score(score, maximize_score=args["maximize_score"])
+            self.score = norm
+
+        except Exception as e:
+            _logger.info(f"Score calculation failed for {self.idx}. Traceback : {e}")
+        self.timing = time.time() - start
+
+    def get_normalized_score(self, value, maximize_score=True, newRange=(0, 1)):
+        "Normalize score to the range 0-1"
+
+        # These xmin and xmax values are hardcoded based on expected good and bad values given the scoring function.
+        if maximize_score:
+            xmin, xmax = -1, 1
+        else:
+            xmin, xmax = 1, -1
+
+        if math.isnan(value):
+            norm = 0
+        else:
+            norm = (value - xmin) / (xmax - xmin)  # scale between zero and one
+        if newRange == (0, 1):
+            pass
+        elif newRange != (0, 1):
+            norm = norm * (newRange[1] - newRange[0]) + newRange[0]  # scale to a different range.
+
+        if norm > 1:
+            norm = 1
+        elif norm < 0:
+            norm = 0
+
+        return norm
+
+
 def optimize(args, workers):
     """Do paralell optimization of all the entries in args."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
