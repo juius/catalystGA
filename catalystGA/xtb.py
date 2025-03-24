@@ -189,7 +189,8 @@ def xtb_calculate(
     if calc_dir:
         results["calc_dir"] = str(work_dir)
     else:
-        work_dir.cleanup()
+        pass
+        # work_dir.cleanup()
 
     return results
 
