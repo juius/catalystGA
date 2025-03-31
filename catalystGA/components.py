@@ -1,23 +1,91 @@
 import concurrent.futures
+import json
 import logging
 import math
+import os
+import pickle
+import socket
+import time
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from pathlib import Path
 from typing import List
 
 import numpy as np
 from hide_warnings import hide_warnings
 from rdkit import Chem
-from rdkit.Chem import rdChemReactions, rdDistGeom
+from rdkit.Chem import Descriptors, GetPeriodicTable, rdChemReactions, rdDistGeom, rdmolops
 from rdkit.Chem.MolStandardize import rdMolStandardize
 from rdkit.Chem.rdchem import Mol
 from rdkit.Chem.rdMolHash import HashFunction, MolHash
 
-from catalystGA.xtb import ac2mol, xtb_calculate
+from catalystGA.xtb import ac2mol, adjacency_check, xtb_calculate, xyz2ac
+
+params = Chem.MolStandardize.rdMolStandardize.MetalDisconnectorOptions()
+params.splitAromaticC = True
+params.splitGrignards = True
+params.adjustCharges = False
+
+MetalNon_Hg = "[#3,#11,#12,#19,#13,#21,#22,#23,#24,#25,#26,#27,#28,#29,#30,#39,#40,#41,#42,#43,#44,#45,#46,#47,#48,#57,#72,#73,#74,#75,#76,#77,#78,#79,#80]~[B,#6,#14,#15,#33,#51,#16,#34,#52,Cl,Br,I,#85]"
+
+pt = GetPeriodicTable
 
 TRANSITION_METALS = (
     "[Sc,Ti,V,Cr,Mn,Fe,Co,Ni,Cu,Zn,Y,Zr,Nb,Mo,Tc,Ru,Rh,Pd,Ag,Cd,Lu,Hf,Ta,W,Re,Os,Ir,Pt,Au,Hg]"
 )
+TRANSITION_METALS_NUM = [
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    57,
+    28,
+    29,
+    30,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+]
+
+
+def make_json_serializable(d):
+    """Return a new dictionary where any Path objects in the values are
+    converted to their string representations."""
+    return {key: (str(value) if isinstance(value, Path) else value) for key, value in d.items()}
+
+
+def get_smiles_atomidx_mapping(mol):
+    "Get the smiles and mapped atom numbering for mol object"
+    mol = Chem.RemoveHs(mol)
+    smi = Chem.MolToSmiles(mol)
+    order = eval(mol.GetProp("_smilesAtomOutputOrder"))
+    mapped_ids = {}
+    for i in mol.GetAtoms():
+        idx = i.GetIdx()
+        mapped_id = np.where(np.array(order) == idx)[0][0]
+        mapped_ids[idx] = int(mapped_id)
+    return smi, mapped_ids
+
 
 #  Dative bond patterns  ###
 
