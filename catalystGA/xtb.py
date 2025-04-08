@@ -422,22 +422,22 @@ def read_xtb_results(lines: list[str]) -> dict:
             polarizability = float(line.split()[-1])
 
         # read dipole moment
-        if i > (dipole_idx + 2):
-            dip_x, dip_y, dip_z, dip_norm = [
-                float(x) for x in line.split()[1:]
-            ]  # norm is in Debye
-            dipole_vec = np.array([dip_x, dip_y, dip_z])  # in a.u. (*2.5412 ot convert to Debye)
-            dipole_idx = np.nan
-
-        # read quadrupole moment
-        if i > (quadrupole_idx + 3):
-            quad_vec = np.array([float(x) for x in line.split()[1:]])  # in a.u.
-            quad_vec[2], quad_vec[3] = quad_vec[3], quad_vec[2]
-            quadrupole_mat = np.zeros((3, 3))
-            indices = np.triu_indices(3)
-            quadrupole_mat[indices] = quad_vec
-            quadrupole_mat[indices[::-1]] = quad_vec
-            quadrupole_idx = np.nan
+        # if i > (dipole_idx + 2):
+        #     dip_x, dip_y, dip_z, dip_norm = [
+        #         float(x) for x in line.split()[1:]
+        #     ]  # norm is in Debye
+        #     dipole_vec = np.array([dip_x, dip_y, dip_z])  # in a.u. (*2.5412 ot convert to Debye)
+        #     dipole_idx = np.nan
+        #
+        # # read quadrupole moment
+        # if i > (quadrupole_idx + 3):
+        #     quad_vec = np.array([float(x) for x in line.split()[1:]])  # in a.u.
+        #     quad_vec[2], quad_vec[3] = quad_vec[3], quad_vec[2]
+        #     quadrupole_mat = np.zeros((3, 3))
+        #     indices = np.triu_indices(3)
+        #     quadrupole_mat[indices] = quad_vec
+        #     quadrupole_mat[indices[::-1]] = quad_vec
+        #     quadrupole_idx = np.nan
 
         # read runtimes
         if i > runtime_idx:
@@ -457,11 +457,11 @@ def read_xtb_results(lines: list[str]) -> dict:
 
     if not np.isnan(polarizability_idx):
         results["polarizability"] = polarizability
-    if not np.isnan(dipole_idx):
-        results["dipole_vec"] = dipole_vec
-        results["dipole_norm"] = dip_norm
-    if not np.isnan(quadrupole_idx):
-        results["quadrupole_mat"] = quadrupole_mat
+    # if not np.isnan(dipole_idx):
+    #     results["dipole_vec"] = dipole_vec
+    #     results["dipole_norm"] = dip_norm
+    # if not np.isnan(quadrupole_idx):
+    #     results["quadrupole_mat"] = quadrupole_mat
 
     results.update(properties)
     # add standardized property names

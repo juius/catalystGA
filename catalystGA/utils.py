@@ -5,12 +5,9 @@ from typing import Optional
 
 from rdkit.Chem import rdMolDescriptors
 
-from catalystGA.components import BaseCatalyst
-
 
 @dataclass
 class MoleculeOptions:
-    individual_type: BaseCatalyst
     min_size: int = 1
     max_size: int = 30
     num_rotatable_bonds: Optional[int] = 5
