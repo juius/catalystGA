@@ -1,8 +1,9 @@
 numpy
 pandas
-# rdkit
+rdkit
 networkx
 tabulate
 py3Dmol
 submitit
 hide-warnings
+tomli
