@@ -7,14 +7,14 @@ from suzuki import SuzukiCatalyst
 
 from catalystGA import GA, Ligand, Metal
 from catalystGA.reproduction_utils import graph_crossover, graph_mutate
-from catalystGA.utils import MoleculeOptions, ScoringOptions
+from catalystGA.utils import MoleculeOptions
 
 
 class GraphGA(GA):
     def __init__(
         self,
         mol_options: MoleculeOptions,
-        scoring_options: ScoringOptions = ScoringOptions(),
+        #scoring_options: ScoringOptions = ScoringOptions(),
         population_size=5,
         n_generations=10,
         maximize_score=True,
@@ -23,7 +23,7 @@ class GraphGA(GA):
     ):
         super().__init__(
             mol_options=mol_options,
-            scoring_options=scoring_options,
+            # scoring_options=scoring_options,
             population_size=population_size,
             n_generations=n_generations,
             maximize_score=maximize_score,
@@ -103,17 +103,18 @@ if __name__ == "__main__":
     # Set Options for Molecule
     mol_options = MoleculeOptions(
         individual_type=SuzukiCatalyst,
-        average_size=10,
-        size_std=5,
+        min_size=10,
+        max_size=25,
+        num_rotatable_bonds=8,
     )
 
     # Set Options for Scoring
-    scoring_options = ScoringOptions(n_cores=1000, parallel=True, cpus_per_task=4)
+    # scoring_options = ScoringOptions(n_cores=1000, parallel=True, cpus_per_task=4)
 
     # Initialize GA
     ga = GraphGA(
         mol_options=mol_options,
-        scoring_options=scoring_options,
+        # scoring_options=scoring_options,
         population_size=5,
         n_generations=2,
     )
